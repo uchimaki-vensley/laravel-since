@@ -1,0 +1,7 @@
+# Orca のリポジトリフック。worktree（ワークスペース）作成時に Docker 環境を立ち上げ、
+# 削除・アーカイブ時に片付ける。Windows では cmd.exe で実行されるため Node スクリプトを呼ぶだけにする。
+scripts:
+  setup: |
+    node scripts/devenv.mjs up
+  archive: |
+    node scripts/devenv.mjs down

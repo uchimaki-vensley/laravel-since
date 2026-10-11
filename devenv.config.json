@@ -1,0 +1,5 @@
+{
+  "project": "laravel-since",
+  "ports": ["APP_PORT"],
+  "composeFile": "compose.yaml"
+}

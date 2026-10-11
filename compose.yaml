@@ -1,0 +1,16 @@
+# ポートは scripts/devenv.mjs が割り当てた環境変数で受ける（固定ポートを書かない）。
+# container_name は指定しない。devenv が `-p {projectName}-{issueNumber}` を付けるので
+# コンテナ・ネットワーク名は自動的に環境ごとに一意になる。
+# 起動は `node scripts/devenv.mjs up`、任意の compose 操作は `node scripts/devenv.mjs compose <args>`。
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["sh", "docker/dev-start.sh"]
+    ports:
+      # 開発サーバーはローカルホストからのみ受け付ける
+      - "127.0.0.1:${APP_PORT:?run 'node scripts/devenv.mjs up' first}:8000"
+    volumes:
+      - .:/app
+    init: true
