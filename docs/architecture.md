@@ -74,8 +74,8 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 | イベント / 通知 | 「新しいリリースを解析した」「型の足りないメソッドが増えた」を自分宛てに通知（任意） |
 | Artisan コマンド | `since:sync`、`since:build`、`since:diff {from} {to}` など |
 | Blade コンポーネント | 静的サイトのページ |
-| テスト | Pest または PHPUnit。`Http::fake`・`Bus::fake`・`Queue::fake` |
-| Larastan | 最大レベルで自分のコードを検査する |
+| テスト | PHPUnit（Pest は入れない）。`Http::fake`・`Bus::fake`・`Queue::fake` |
+| Larastan | レベル `max`・ベースラインなしで自分のコードを検査する（`phpstan.neon`、CI で実行） |
 
 ## ソース解析の方針
 

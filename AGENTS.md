@@ -25,6 +25,7 @@ node scripts/devenv.mjs up                                    # 起動
 node scripts/devenv.mjs info                                  # 割当ポート
 node scripts/devenv.mjs compose exec app php artisan test     # テスト
 node scripts/devenv.mjs compose exec app vendor/bin/pint      # 整形
+node scripts/devenv.mjs compose exec app composer analyse     # 静的解析（Larastan / PHPStan、レベル max）
 node scripts/devenv.mjs compose exec app composer audit       # 依存の脆弱性確認
 node --test scripts/devenv.test.mjs                           # devenv のテスト（ホストの Node）
 ```
@@ -35,6 +36,14 @@ node --test scripts/devenv.test.mjs                           # devenv のテス
 - ドキュメントと実装を一致させる。設計を変えたら同じ PR で `docs/` を更新する。
 - 処理は Artisan コマンド・ジョブ・スケジューラという普通の Laravel の作りで書く（将来 VPS に移しても同じ動きにするため）。
 - 列挙値は backed enum + Eloquent の enum キャストで扱う。
+
+### 静的解析とテスト
+- 静的解析は Larastan をレベル `max` で使う（設定は `phpstan.neon`）。CI の `test` ジョブで実行され、エラーがあれば失敗する。
+- ベースライン（`phpstan-baseline.neon`）は作らない。エラーは `@phpstan-ignore` で黙らせず、コードか型の記述を直す。
+  どうしても無視が必要なら `@phpstan-ignore <識別子> (理由)` の形で、識別子と理由を書く。
+- テストは **PHPUnit** で書く（依存を増やさないため。Pest は入れない）。
+  アプリを起動するテストは `tests/Feature` に置いて `Tests\TestCase` を、起動しないテストは `tests/Unit` に置いて
+  `PHPUnit\Framework\TestCase` を継承する。メソッド名は `test_` で始める。外部 HTTP は `Http::fake` で止める。
 
 ### セキュリティ（詳細は docs/security.md）
 - 解析対象のソースを `require` / `include` / `eval` / オートロードで読み込まない。構文解析だけにする。
