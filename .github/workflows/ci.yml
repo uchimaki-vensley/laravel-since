@@ -46,6 +46,9 @@ jobs:
       - name: Code style
         run: vendor/bin/pint --test
 
+      - name: Static analysis
+        run: composer analyse -- --no-progress --error-format=github
+
       - name: Tests
         run: php artisan test
 
