@@ -2,15 +2,17 @@
 
 namespace Database\Factories;
 
-use App\Enums\SymbolChangeKind;
-use App\Models\Release;
-use App\Models\Symbol;
-use App\Models\SymbolChange;
+use App\Domain\Enums\SymbolChangeKind;
+use App\Infrastructure\Persistence\Eloquent\Models\Release;
+use App\Infrastructure\Persistence\Eloquent\Models\Symbol;
+use App\Infrastructure\Persistence\Eloquent\Models\SymbolChange;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /** @extends Factory<SymbolChange> */
 class SymbolChangeFactory extends Factory
 {
+    protected $model = SymbolChange::class;
+
     public function definition(): array
     {
         return [

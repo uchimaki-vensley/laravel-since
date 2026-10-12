@@ -2,18 +2,26 @@
 
 namespace Database\Factories;
 
-use App\Models\Method;
-use App\Models\Parameter;
+use App\Infrastructure\Persistence\Eloquent\Models\Method;
+use App\Infrastructure\Persistence\Eloquent\Models\Parameter;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 
 /** @extends Factory<Parameter> */
 class ParameterFactory extends Factory
 {
+    protected $model = Parameter::class;
+
+    public function configure(): static
+    {
+        return $this->sequence(fn (Sequence $sequence): array => ['position' => $sequence->index]);
+    }
+
     public function definition(): array
     {
         return [
             'method_id' => Method::factory(),
-            'position' => fake()->unique()->numberBetween(0, PHP_INT_MAX),
+            'position' => 0,
             'name' => 'value',
             'type' => 'string',
             'default_value' => null,

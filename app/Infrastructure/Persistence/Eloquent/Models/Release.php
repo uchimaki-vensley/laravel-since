@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models;
+namespace App\Infrastructure\Persistence\Eloquent\Models;
 
 use Database\Factories\ReleaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,6 +15,11 @@ class Release extends Model
     use HasFactory;
 
     public $timestamps = false;
+
+    protected static function newFactory(): ReleaseFactory
+    {
+        return ReleaseFactory::new();
+    }
 
     /** @return HasMany<Type, $this> */
     public function types(): HasMany

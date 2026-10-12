@@ -2,12 +2,14 @@
 
 namespace Database\Factories;
 
-use App\Models\Symbol;
+use App\Infrastructure\Persistence\Eloquent\Models\Symbol;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /** @extends Factory<Symbol> */
 class SymbolFactory extends Factory
 {
+    protected $model = Symbol::class;
+
     public function definition(): array
     {
         return [

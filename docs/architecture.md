@@ -26,6 +26,25 @@
 - スケジューラは `routes/console.php` に普通に定義し、Actions からは `php artisan schedule:run` ではなく
   目的のコマンドを直接呼ぶ。VPS に移したときは cron から `schedule:run` を呼ぶだけで同じ動きになる。
 
+## 層構成
+
+Onion Architecture を採用し、依存は外側から内側へ向ける。
+
+```
+Presentation → Application → Domain
+Infrastructure ────────────→ Application / Domain
+```
+
+- `Domain`: Laravel や外部サービスに依存しない、公開 API の概念・値・ルール。
+- `Application`: 取得・解析・差分・出力のユースケースと、永続化や外部 I/O のポート。
+- `Infrastructure`: Eloquent / SQLite、HTTP、ファイル操作、parser などの技術アダプター。
+- `Presentation`: `App\Http\Controllers` / `App\Console\Commands` / `App\Jobs` など Laravel の入口。Application のユースケースを呼び出す。
+- 内側の層から外側の具体クラスを参照しない。インターフェースは利用側（Application）に置き、Infrastructure が実装する。
+- Eloquent モデルは永続化層のレコードとして扱い、ドメインのルールを置かない。Repository や Use Case は利用が始まる時点で追加する。
+
+Issue #3 の配置では、enum を `App\Domain\Enums`、Eloquent モデルを
+`App\Infrastructure\Persistence\Eloquent\Models` に置く。
+
 ## データモデル（案）
 
 ```
@@ -49,7 +68,7 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 
 - `types` / `methods` / `parameters` はリリースごとのスナップショット。`symbols` はリリースをまたいで同じメソッドを指す ID。
 - 「いつから存在するか」は `symbol_changes` の `added` を見る。シグネチャの比較は `signature_hash` で絞り込んでから詳細を比べる。
-- `types.kind` / `methods.visibility` / `symbol_changes.kind` は PHP の backed enum + Eloquent の enum キャストで扱う。
+- `types.kind` / `methods.visibility` / `symbol_changes.kind` は Domain の backed enum を Eloquent の enum キャストで保存する。
 - 一意キー: `releases(package, version)`、`types(release_id, fqcn)`、`methods(type_id, name)`、
   `parameters(method_id, position)`、`symbols(fqcn, member)`、`symbol_changes(symbol_id, release_id, kind)`。
 - データ量の見積もり（要検証）: `laravel/framework` 1 リリースあたり数千メソッド。11.0 以降のリリース数 × それ。

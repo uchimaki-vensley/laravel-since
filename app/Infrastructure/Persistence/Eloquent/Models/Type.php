@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Models;
+namespace App\Infrastructure\Persistence\Eloquent\Models;
 
-use App\Enums\TypeKind;
+use App\Domain\Enums\TypeKind;
 use Database\Factories\TypeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,6 +17,11 @@ class Type extends Model
     use HasFactory;
 
     public $timestamps = false;
+
+    protected static function newFactory(): TypeFactory
+    {
+        return TypeFactory::new();
+    }
 
     /** @return BelongsTo<Release, $this> */
     public function release(): BelongsTo

@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Models;
+namespace App\Infrastructure\Persistence\Eloquent\Models;
 
-use App\Enums\Visibility;
+use App\Domain\Enums\Visibility;
 use Database\Factories\MethodFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,6 +17,11 @@ class Method extends Model
     use HasFactory;
 
     public $timestamps = false;
+
+    protected static function newFactory(): MethodFactory
+    {
+        return MethodFactory::new();
+    }
 
     /** @return BelongsTo<Type, $this> */
     public function type(): BelongsTo

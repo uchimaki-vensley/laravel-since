@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Models;
+namespace App\Infrastructure\Persistence\Eloquent\Models;
 
-use App\Enums\SymbolChangeKind;
+use App\Domain\Enums\SymbolChangeKind;
 use Database\Factories\SymbolChangeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +16,11 @@ class SymbolChange extends Model
     use HasFactory;
 
     public $timestamps = false;
+
+    protected static function newFactory(): SymbolChangeFactory
+    {
+        return SymbolChangeFactory::new();
+    }
 
     /** @return BelongsTo<Symbol, $this> */
     public function symbol(): BelongsTo

@@ -2,14 +2,16 @@
 
 namespace Database\Factories;
 
-use App\Enums\Visibility;
-use App\Models\Method;
-use App\Models\Type;
+use App\Domain\Enums\Visibility;
+use App\Infrastructure\Persistence\Eloquent\Models\Method;
+use App\Infrastructure\Persistence\Eloquent\Models\Type;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /** @extends Factory<Method> */
 class MethodFactory extends Factory
 {
+    protected $model = Method::class;
+
     public function definition(): array
     {
         return [

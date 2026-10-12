@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models;
+namespace App\Infrastructure\Persistence\Eloquent\Models;
 
 use Database\Factories\SymbolFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,6 +15,11 @@ class Symbol extends Model
     use HasFactory;
 
     public $timestamps = false;
+
+    protected static function newFactory(): SymbolFactory
+    {
+        return SymbolFactory::new();
+    }
 
     /** @return HasMany<SymbolChange, $this> */
     public function changes(): HasMany

@@ -2,17 +2,19 @@
 
 namespace Tests\Feature;
 
-use App\Enums\SymbolChangeKind;
-use App\Enums\TypeKind;
-use App\Enums\Visibility;
-use App\Models\Method;
-use App\Models\Parameter;
-use App\Models\Release;
-use App\Models\Symbol;
-use App\Models\SymbolChange;
-use App\Models\Type;
+use App\Domain\Enums\SymbolChangeKind;
+use App\Domain\Enums\TypeKind;
+use App\Domain\Enums\Visibility;
+use App\Infrastructure\Persistence\Eloquent\Models\Method;
+use App\Infrastructure\Persistence\Eloquent\Models\Parameter;
+use App\Infrastructure\Persistence\Eloquent\Models\Release;
+use App\Infrastructure\Persistence\Eloquent\Models\Symbol;
+use App\Infrastructure\Persistence\Eloquent\Models\SymbolChange;
+use App\Infrastructure\Persistence\Eloquent\Models\Type;
 use DateTimeInterface;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class DataModelTest extends TestCase
@@ -36,6 +38,7 @@ class DataModelTest extends TestCase
         $this->assertCount(2, $parameters);
         $this->assertCount(2, $method->parameters);
         $this->assertCount(2, $parameters->pluck('position')->unique());
+        $this->assertSame([0, 1], $parameters->pluck('position')->all());
         foreach ($parameters as $parameter) {
             $this->assertTrue($parameter->method?->is($method) ?? false);
         }
@@ -84,5 +87,85 @@ class DataModelTest extends TestCase
             ['added', 'removed', 'signature_changed', 'deprecated'],
             array_map(fn (SymbolChangeKind $kind): string => $kind->value, SymbolChangeKind::cases()),
         );
+    }
+
+    public function test_type_rows_are_unique_per_release_and_fqcn(): void
+    {
+        $release = Release::factory()->create();
+        $type = Type::factory()->for($release)->create();
+
+        $this->expectException(UniqueConstraintViolationException::class);
+
+        Type::factory()->for($release)->create(['fqcn' => $type->fqcn]);
+    }
+
+    public function test_symbol_changes_are_unique_per_symbol_release_and_kind(): void
+    {
+        $release = Release::factory()->create();
+        $symbol = Symbol::factory()->create();
+        $attributes = ['kind' => SymbolChangeKind::Added];
+
+        SymbolChange::factory()->for($symbol)->for($release)->create($attributes);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+
+        SymbolChange::factory()->for($symbol)->for($release)->create($attributes);
+    }
+
+    public function test_release_deletion_cascades_through_dependent_rows(): void
+    {
+        $release = Release::factory()->create();
+        $type = Type::factory()->for($release)->create();
+        $method = Method::factory()->for($type)->create();
+        Parameter::factory()->for($method)->create();
+        $symbol = Symbol::factory()->create();
+        SymbolChange::factory()->for($symbol)->for($release)->create();
+
+        $release->delete();
+
+        $this->assertDatabaseCount('types', 0);
+        $this->assertDatabaseCount('methods', 0);
+        $this->assertDatabaseCount('parameters', 0);
+        $this->assertDatabaseCount('symbol_changes', 0);
+        $this->assertDatabaseCount('symbols', 1);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function remainingUniqueKeys(): array
+    {
+        return [
+            'release package and version' => ['release'],
+            'method type and name' => ['method'],
+            'parameter method and position' => ['parameter'],
+            'symbol fqcn and member' => ['symbol'],
+        ];
+    }
+
+    #[DataProvider('remainingUniqueKeys')]
+    public function test_remaining_unique_keys_reject_duplicates(string $key): void
+    {
+        $release = Release::factory()->create();
+        $type = Type::factory()->for($release)->create();
+        $method = Method::factory()->for($type)->create();
+        $parameter = Parameter::factory()->for($method)->create();
+        $symbol = Symbol::factory()->create();
+
+        $duplicate = match ($key) {
+            'release' => fn () => Release::factory()->create([
+                'package' => $release->package,
+                'version' => $release->version,
+            ]),
+            'method' => fn () => Method::factory()->for($type)->create(['name' => $method->name]),
+            'parameter' => fn () => Parameter::factory()->for($method)->create(['position' => $parameter->position]),
+            'symbol' => fn () => Symbol::factory()->create([
+                'fqcn' => $symbol->fqcn,
+                'member' => $symbol->member,
+            ]),
+            default => throw new \InvalidArgumentException("Unknown unique key: {$key}"),
+        };
+
+        $this->expectException(UniqueConstraintViolationException::class);
+
+        $duplicate();
     }
 }
