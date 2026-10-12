@@ -45,6 +45,13 @@ class DataModelTest extends TestCase
         $this->assertSame(Visibility::Public, $method->refresh()->visibility);
     }
 
+    public function test_method_fillable_attribute_allows_model_fields(): void
+    {
+        $method = new Method(['name' => 'resolve']);
+
+        $this->assertSame('resolve', $method->name);
+    }
+
     public function test_symbol_change_relationships_and_enum_casts(): void
     {
         $release = Release::factory()->create();
