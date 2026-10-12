@@ -34,12 +34,13 @@ node --test scripts/devenv.test.mjs                           # devenv のテス
 ## 規則
 
 ### 設計
-- Onion Architecture の層・依存方向・配置は guideline.md に従い、実装時とレビュー時に人が確認する。自動検査は PHP と autoload の一般的な誤りを対象とし、アーキテクチャの適合は判定しない。境界を変える場合は関連ドキュメントと振る舞いのテストを更新する。
+- Onion Architecture の層・依存方向・配置は guideline.md に従い、実装時とレビュー時に人が確認する。Application Service は Application にインターフェースと実装を置き、Repository は Application にインターフェース、Infrastructure に実装を置く。app/Providers で実装を結び付ける。自動検査は PHP と autoload の一般的な誤りを対象とし、アーキテクチャの適合は判定しない。境界を変える場合は関連ドキュメントと振る舞いのテストを更新する。
 - ドキュメントと実装を一致させる。設計を変えたら同じ PR で `docs/` を更新する。
 - 処理は Artisan コマンド・ジョブ・スケジューラという普通の Laravel の作りで書く（将来 VPS に移しても同じ動きにするため）。
 - 列挙値は backed enum + Eloquent の enum キャストで扱う。
 
 ### 静的解析とテスト
+- PHP の `#` 単一行コメントは `#` の後に半角スペースを1つ置く。Pint と CI の `pint --test` で検査する。
 - 静的解析は Larastan をレベル `max` で使う（設定は `phpstan.neon`）。CI の `test` ジョブで実行され、エラーがあれば失敗する。
 - ベースライン（`phpstan-baseline.neon`）は作らない。エラーは `@phpstan-ignore` で黙らせず、コードか型の記述を直す。
   どうしても無視が必要なら `@phpstan-ignore <識別子> (理由)` の形で、識別子と理由を書く。

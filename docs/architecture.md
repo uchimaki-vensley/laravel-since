@@ -40,8 +40,10 @@ Infrastructure ────────────→ Application / Domain
 - `Application`: 取得・解析・差分・出力のユースケースと、永続化や外部 I/O のポート。
 - `Infrastructure`: Eloquent / SQLite、HTTP、ファイル操作、parser などの技術アダプター。
 - `Presentation`: `App\Http\Controllers` / `App\Console\Commands` / `App\Jobs` など Laravel の入口。Application のユースケースを呼び出す。
-- 内側の層から外側の具体クラスを参照しない。インターフェースは利用側（Application）に置き、Infrastructure が実装する。
-- Eloquent モデルは永続化層のレコードとして扱い、ドメインのルールを置かない。Repository や Use Case は利用が始まる時点で追加する。
+- Application Service はインターフェースと実装を持ち、Presentation はインターフェース経由で呼び出す。
+- Repository インターフェース（ポート）は Application に置き、Application Service はそのインターフェースに依存する。Infrastructure が Repository を実装する。
+- app/Providers は Service / Repository のインターフェースと実装を結び付ける Composition Root とする。
+- Eloquent モデルは永続化層のレコードとして扱い、ドメインのルールを置かない。Service / Repository は具体的なユースケースを実装するときに追加し、先回りした空の interface は作らない。
 
 Issue #3 の配置では、enum を `App\Domain\Enums`、Eloquent モデルを
 `App\Infrastructure\Persistence\Eloquent\Models` に置く。
