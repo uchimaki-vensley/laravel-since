@@ -34,7 +34,7 @@ node --test scripts/devenv.test.mjs                           # devenv のテス
 ## 規則
 
 ### 設計
-- Onion Architecture の層・依存方向・配置は guideline.md に従う。実装とレビューの両方で同文書のチェック項目を使い、境界を変える場合は ArchitectureTest と関連ドキュメントも更新する。
+- Onion Architecture の層・依存方向・配置は guideline.md に従い、実装時とレビュー時に人が確認する。自動検査は PHP と autoload の一般的な誤りを対象とし、アーキテクチャの適合は判定しない。境界を変える場合は関連ドキュメントと振る舞いのテストを更新する。
 - ドキュメントと実装を一致させる。設計を変えたら同じ PR で `docs/` を更新する。
 - 処理は Artisan コマンド・ジョブ・スケジューラという普通の Laravel の作りで書く（将来 VPS に移しても同じ動きにするため）。
 - 列挙値は backed enum + Eloquent の enum キャストで扱う。

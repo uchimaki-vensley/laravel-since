@@ -1,6 +1,6 @@
 # Onion Architecture 実装ガイドライン
 
-この文書は実装とレビューの共通基準です。着手前に読み、レビューでは末尾のチェック項目を使ってください。設計を変える場合は、この文書と docs/architecture.md を同じ PR で更新します。
+この文書は実装とレビューの共通基準です。着手前に読み、レビューでは末尾のチェック項目を使ってください。Onion Architecture への適合は実装時とレビュー時に人が確認します。設計を変える場合は、この文書と docs/architecture.md を同じ PR で更新します。
 
 ## 層と依存方向
 
@@ -30,14 +30,14 @@ Presentation から Infrastructure の具体クラスを直接使わないでく
 - Presentation は入力・出力と Laravel のライフサイクルを扱い、ユースケースの詳細や永続化を実装しません。
 - app/Providers は Composition Root として依存を登録する場所です。ユースケースや業務ルールは置きません。
 - Repository や Use Case の抽象は、具体的な機能で境界が必要になった時に追加します。先回りした空の interface や層は作りません。
-- 既存の責務を別の層へ移す場合は、呼び出し元、テスト、docs/architecture.md、ArchitectureTest を合わせて更新します。
+- 既存の責務を別の層へ移す場合は、呼び出し元、振る舞いのテスト、関連ドキュメントを合わせて更新します。
 
 ## 実装時の確認
 
 1. 変更するコードを上表の層に分類し、ファイルと名前空間を対応させます。
 2. 依存先が許可方向にあることを確認します。内側のコードから外側のクラスを直接呼ぶ必要がある場合は、Application にポートを置き、Infrastructure で実装します。
 3. 層の境界をまたぐ振る舞いには、呼び出し元と結果を検証するテストを追加します。
-4. 新しい層・名前空間・依存パターンを導入したら、ArchitectureTest の対象と違反例テストを更新します。
+4. 新しい層・名前空間・依存パターンを導入したら、ガイドとレビュー項目を見直します。
 5. 実装と設計が変わった場合は docs/architecture.md も更新します。
 
 ## レビュー時の確認
@@ -46,12 +46,12 @@ Presentation から Infrastructure の具体クラスを直接使わないでく
 - Domain / Application が Laravel、Infrastructure、外部 I/O に依存していないか。
 - Presentation が Eloquent モデルや Infrastructure の具体クラスを直接参照していないか。
 - ポートが利用側の Application に置かれ、Infrastructure が実装しているか。
-- ArchitectureTest が追加・変更された依存を検出し、違反時にファイル・行・依存先を示すか。
-- テストが依存方向の正常例・違反例を検査し、CI の既存テストジョブで実行されるか。
+- 依存方向と各クラスの配置がこのガイドに沿っているか。
+- 層をまたぐ振る舞いのテストが、期待する動作を検証しているか。
 - ドキュメントと実装に食い違いがないか。
 
-## 強制と違反の直し方
+## 自動検査の範囲
 
-tests/Unit/ArchitectureTest.php がファイル配置と宣言 namespace の一致、層ごとの名前空間依存、Domain / Application からの Laravel helper・Facade alias・代表的な PHP ファイルシステム関数とクラスの利用を検査します。検査失敗には対象ファイル、行、依存先が表示されます。CI は既存の PHPUnit 実行でこの検査を行います。Larastan と Pint は層間依存を保証しません。
+CI の Larastan / PHPStan は解析対象 PHP の構文・型を検査し、構文エラーやクラス等の同一宣言内の重複メンバーも報告します。Composer の strict PSR-4 チェックは autoload 対象ファイルの namespace と配置の不整合を検出します。これらは PHP と autoload の一般的な誤りを対象にし、Onion Architecture の層や依存方向は判定しません。
 
-違反した場合は、外側の技術処理を Infrastructure へ移すか、Application が所有するポートを介して接続します。依存ルール自体を変える必要がある場合は、先にこの文書・docs/architecture.md・ArchitectureTest を一緒に更新してください。違反を無視する設定やコメントで検査を迂回しないでください。
+層や依存方向に違反している場合は、外側の技術処理を Infrastructure へ移すか、Application が所有するポートを介して接続します。依存ルール自体を変える場合は、この文書と docs/architecture.md を一緒に更新してください。
