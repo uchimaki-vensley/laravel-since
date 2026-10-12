@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-# [Fillable(['type_id', 'name', 'visibility', 'is_static', 'return_type', 'docblock_return_type', 'signature_hash'])]
+#[Fillable(['type_id', 'name', 'visibility', 'is_static', 'return_type', 'docblock_return_type', 'signature_hash'])]
 class Method extends Model
 {
     /** @use HasFactory<MethodFactory> */

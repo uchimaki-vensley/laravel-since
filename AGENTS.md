@@ -40,7 +40,6 @@ node --test scripts/devenv.test.mjs                           # devenv のテス
 - 列挙値は backed enum + Eloquent の enum キャストで扱う。
 
 ### 静的解析とテスト
-- PHP の `#` 単一行コメントは `#` の後に半角スペースを1つ置く。Pint と CI の `pint --test` で検査する。
 - 静的解析は Larastan をレベル `max` で使う（設定は `phpstan.neon`）。CI の `test` ジョブで実行され、エラーがあれば失敗する。
 - ベースライン（`phpstan-baseline.neon`）は作らない。エラーは `@phpstan-ignore` で黙らせず、コードか型の記述を直す。
   どうしても無視が必要なら `@phpstan-ignore <識別子> (理由)` の形で、識別子と理由を書く。
