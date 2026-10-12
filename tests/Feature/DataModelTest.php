@@ -46,7 +46,8 @@ class DataModelTest extends TestCase
     {
         $release = Release::factory()->create();
         $type = Type::factory()->for($release)->create(['kind' => TypeKind::InterfaceType]);
-        $symbol = Symbol::factory()->create();
+        $symbols = Symbol::factory()->count(2)->create();
+        $symbol = $symbols->firstOrFail();
         $change = SymbolChange::factory()->for($symbol)->for($release)->create([
             'kind' => SymbolChangeKind::SignatureChanged,
             'before' => ['signature' => 'function method(): int'],
@@ -57,6 +58,7 @@ class DataModelTest extends TestCase
         $change->refresh();
 
         $this->assertSame(TypeKind::InterfaceType, $type->kind);
+        $this->assertCount(2, $symbols->pluck('fqcn')->unique());
         $this->assertSame(SymbolChangeKind::SignatureChanged, $change->kind);
         $this->assertTrue($symbol->changes->contains($change));
         $this->assertTrue($release->symbolChanges->contains($change));

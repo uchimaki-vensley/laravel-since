@@ -11,7 +11,7 @@ class SymbolFactory extends Factory
     public function definition(): array
     {
         return [
-            'fqcn' => 'App\\Types\\'.fake()->lexify('Type????'),
+            'fqcn' => 'App\\Types\\'.fake()->unique()->lexify('Type????'),
             'member' => fake()->lexify('method????'),
         ];
     }
