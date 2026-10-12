@@ -7,6 +7,7 @@ Laravel フレームワークの公開 API をリリースごとに解析し、�
 
 - [docs/context.md](docs/context.md): 経緯・目的・決めたこと（なぜこうなっているか）
 - [docs/architecture.md](docs/architecture.md): 構成・データモデル・使う Laravel の機能
+- [guideline.md](guideline.md): Onion Architecture の実装・レビュー基準（実装・レビュー前に必ず読む）
 - [docs/infrastructure.md](docs/infrastructure.md): GitHub Actions / Cloudflare Pages の構成とシークレット
 - [docs/security.md](docs/security.md): 脅威モデルと守るべき規則（**必ず守る**）
 
@@ -33,6 +34,7 @@ node --test scripts/devenv.test.mjs                           # devenv のテス
 ## 規則
 
 ### 設計
+- Onion Architecture の層・依存方向・配置は guideline.md に従う。実装とレビューの両方で同文書のチェック項目を使い、境界を変える場合は ArchitectureTest と関連ドキュメントも更新する。
 - ドキュメントと実装を一致させる。設計を変えたら同じ PR で `docs/` を更新する。
 - 処理は Artisan コマンド・ジョブ・スケジューラという普通の Laravel の作りで書く（将来 VPS に移しても同じ動きにするため）。
 - 列挙値は backed enum + Eloquent の enum キャストで扱う。

@@ -29,6 +29,7 @@
 ## 層構成
 
 Onion Architecture を採用し、依存は外側から内側へ向ける。
+層の責務、配置、実装・レビューの詳細なルールは [guideline.md](../guideline.md) を参照。
 
 ```
 Presentation → Application → Domain
