@@ -49,7 +49,9 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 
 - `types` / `methods` / `parameters` はリリースごとのスナップショット。`symbols` はリリースをまたいで同じメソッドを指す ID。
 - 「いつから存在するか」は `symbol_changes` の `added` を見る。シグネチャの比較は `signature_hash` で絞り込んでから詳細を比べる。
-- `kind` などの列挙値は PHP の backed enum + Eloquent の enum キャストで扱う。
+- `types.kind` / `methods.visibility` / `symbol_changes.kind` は PHP の backed enum + Eloquent の enum キャストで扱う。
+- 一意キー: `releases(package, version)`、`types(release_id, fqcn)`、`methods(type_id, name)`、
+  `parameters(method_id, position)`、`symbols(fqcn, member)`、`symbol_changes(symbol_id, release_id, kind)`。
 - データ量の見積もり（要検証）: `laravel/framework` 1 リリースあたり数千メソッド。11.0 以降のリリース数 × それ。
   スナップショットが大きくなりすぎる場合は「変化があったときだけ行を持つ」形に切り替える。
 
