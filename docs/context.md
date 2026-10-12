@@ -3,7 +3,7 @@
 別のセッション・別の PC・別のエージェントがこのプロジェクトを引き継ぐための文書。
 「なぜこうなっているか」を残す。実装の詳細は [architecture.md](architecture.md) を参照。
 
-最終更新: 2026-10-11
+最終更新: 2026-10-12
 
 ## 1. 始まり
 
@@ -68,6 +68,7 @@ Larastan の貢献作業で、「このメソッドは Laravel のどのバー�
 | Laravel / PHP | Laravel 13 / PHP 8.5 | 作成時点の最新 |
 | DB | SQLite | バッチで作って捨てられる。サーバー不要 |
 | ソース解析 | `nikic/php-parser` で構文として読む | 取得した Laravel のコードを **実行しない** ため（安全性） |
+| アーキテクチャ | Onion Architecture | Domain を Laravel・外部 I/O から独立させ、技術詳細を外側の Infrastructure に置く |
 | 対象範囲 | まず `laravel/framework` の 11.0.0 以降 | Larastan の対応範囲に合わせる。範囲は設定で広げられるようにする |
 | 配信 | Cloudflare Pages（Direct Upload） | 無料。Git 連携ではなく Actions からアップロードし、PR からのビルドを走らせない |
 | ライセンス | MIT | Laravel 本体・エコシステムに合わせた |
