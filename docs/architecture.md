@@ -23,6 +23,7 @@
 
 - Laravel は **バッチとして** 動く。Web サーバー（`php artisan serve`）は開発時のプレビューにだけ使う。
 - 本番に常時動くプロセスはない。キューは 1 回の実行の中で処理しきる（`database` ドライバ + `queue:work --stop-when-empty`）。
+- `since:sync` は安定版タグを `releases` に upsert し、未解析リリースごとの `FetchReleaseSource` ジョブをバッチ投入する。
 - スケジューラは `routes/console.php` に普通に定義し、Actions からは `php artisan schedule:run` ではなく
   目的のコマンドを直接呼ぶ。VPS に移したときは cron から `schedule:run` を呼ぶだけで同じ動きになる。
 

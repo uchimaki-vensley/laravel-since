@@ -24,12 +24,20 @@ VPS・常時動くサーバー・外部 DB は持たない（理由は context.m
 
 1. main をチェックアウト（`persist-credentials: false`）
 2. PHP をセットアップし、`composer install --no-dev`
-3. `php artisan migrate` → `php artisan since:sync` → `php artisan since:build`
+3. `php artisan migrate` → `php artisan since:sync` → `php artisan queue:work --stop-when-empty` → `php artisan since:build`
 4. `wrangler pages deploy dist/ --project-name=laravel-since`（Direct Upload）
 
 - Cloudflare Pages の **Git 連携は使わない**。Git 連携だと PR ごとにプレビューのビルドが走るため、
   ビルドの実行とデプロイの権限を GitHub Actions の `production` 環境に一本化する。
 - GitHub API は Actions の `GITHUB_TOKEN`（読み取りのみ）で呼ぶ。未認証より緩いレート制限で済む。
+
+### リリースソースの同期
+
+- `php artisan since:sync` は GitHub のタグ一覧から安定版を取得し、`SINCE_MINIMUM_VERSION`（既定 `11.0.0`）以降を `releases` に登録する。
+- `GITHUB_TOKEN` が設定されていれば GitHub API に使う。未設定でも同期できる。
+- 未解析リリースごとにダウンロードジョブをバッチ投入する。ジョブは `database` キューのワーカーで処理する。
+- 展開済みソースは `storage/app/private/sources/`、ダウンロード中の tarball は処理後に削除する。tarball と展開後の合計サイズ、各ファイルサイズ、エントリ数に上限を設け、パス traversal・リンク・特殊ファイルを拒否する。
+- 取得ソースは展開のみ行い、PHP として読み込まない。
 
 ## シークレットの管理
 
