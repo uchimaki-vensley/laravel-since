@@ -10,6 +10,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -119,7 +120,10 @@ class GitHubReleaseSourceAdapter implements GitHubReleaseSource
      */
     private function getWithRetries(string $url, array $query = [], array $options = []): Response
     {
-        for ($attempt = 1; $attempt <= 3; $attempt++) {
+        $transientFailures = 0;
+        $rateLimitFailures = 0;
+
+        while (true) {
             $this->reserveGitHubRequest();
 
             try {
@@ -129,30 +133,62 @@ class GitHubReleaseSourceAdapter implements GitHubReleaseSource
                 }
                 $response = $request->get($url, $query);
             } catch (ConnectionException $exception) {
-                if ($attempt === 3) {
+                if (++$transientFailures >= 3) {
                     throw $exception;
                 }
-                usleep(1_000_000);
+                Sleep::sleep(1);
 
                 continue;
             }
 
-            if (($response->serverError() || $response->status() === 429) && $attempt < 3) {
-                usleep(1_000_000);
+            $rateLimitDelay = $this->rateLimitRetryDelay($response, $rateLimitFailures);
+            if ($rateLimitDelay !== null) {
+                if (++$rateLimitFailures > 3) {
+                    return $response->throw();
+                }
+                Sleep::sleep($rateLimitDelay);
+
+                continue;
+            }
+
+            if ($response->serverError() && ++$transientFailures < 3) {
+                Sleep::sleep(1);
 
                 continue;
             }
 
             return $response->throw();
         }
+    }
 
-        throw new RuntimeException('Could not complete GitHub request.');
+    private function rateLimitRetryDelay(Response $response, int $failures): ?int
+    {
+        if ($response->status() !== 403 && $response->status() !== 429) {
+            return null;
+        }
+
+        $remaining = $response->header('x-ratelimit-remaining');
+        $retryAfter = filter_var($response->header('retry-after'), FILTER_VALIDATE_INT);
+        $message = $response->json('message');
+        if ($remaining !== '0' && ! is_int($retryAfter) && $response->status() !== 429
+            && (! is_string($message) || ! str_contains(strtolower($message), 'rate limit'))) {
+            return null;
+        }
+
+        $delay = is_int($retryAfter) ? max(1, $retryAfter) : 0;
+        if ($remaining === '0') {
+            $resetAt = filter_var($response->header('x-ratelimit-reset'), FILTER_VALIDATE_INT);
+            $serverTime = strtotime($response->header('date'));
+            $delay = max($delay, is_int($resetAt) ? $resetAt - (is_int($serverTime) ? $serverTime : time()) + 1 : 60);
+        }
+
+        return $delay > 0 ? $delay : 60 * (2 ** $failures);
     }
 
     private function reserveGitHubRequest(): void
     {
         while (! RateLimiter::attempt('github-api', 30, static fn (): bool => true, 60)) {
-            sleep(max(1, RateLimiter::availableIn('github-api')));
+            Sleep::sleep(max(1, RateLimiter::availableIn('github-api')));
         }
     }
 

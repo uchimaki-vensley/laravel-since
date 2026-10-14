@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Application\Releases\GitHubReleaseSource;
 use App\Infrastructure\ReleaseSource\SafeTarballExtractor;
+use Carbon\CarbonInterval;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -39,6 +43,60 @@ class SyncReleasesTest extends TestCase
         $this->assertDatabaseMissing('releases', ['version' => '10.48.0']);
         $this->assertDatabaseMissing('releases', ['version' => '13.1.0-beta1']);
         Bus::assertBatched(static fn (PendingBatch $batch): bool => $batch->jobs->count() === 2);
+    }
+
+    public function test_it_waits_for_the_github_hourly_limit_to_reset(): void
+    {
+        config(['since.github_token' => null]);
+        Http::fakeSequence()
+            ->push(['message' => 'API rate limit exceeded'], 403, [
+                'x-ratelimit-remaining' => '0',
+                'x-ratelimit-reset' => (string) (time() + 90),
+            ])
+            ->push([['name' => 'v13.0.0']]);
+        Sleep::fake();
+
+        try {
+            $this->assertSame(
+                [['tag' => 'v13.0.0', 'released_at' => null]],
+                app(GitHubReleaseSource::class)->stableTags('laravel/framework'),
+            );
+            Sleep::assertSlept(static fn (CarbonInterval $duration): bool => $duration->totalSeconds >= 89 && $duration->totalSeconds <= 92);
+            Http::assertSentCount(2);
+        } finally {
+            Sleep::fake(false);
+        }
+    }
+
+    public function test_it_obeys_github_retry_after_on_a_rate_limit_response(): void
+    {
+        Http::fakeSequence()
+            ->push(['message' => 'secondary rate limit'], 429, ['retry-after' => '7'])
+            ->push([['name' => 'v13.0.0']]);
+        Sleep::fake();
+
+        try {
+            $this->assertCount(1, app(GitHubReleaseSource::class)->stableTags('laravel/framework'));
+            Sleep::assertSlept(static fn (CarbonInterval $duration): bool => $duration->totalSeconds === 7.0);
+            Http::assertSentCount(2);
+        } finally {
+            Sleep::fake(false);
+        }
+    }
+
+    public function test_it_does_not_retry_an_unrelated_github_forbidden_response(): void
+    {
+        Http::fakeSequence()->push(['message' => 'Resource not accessible by integration'], 403);
+        Sleep::fake();
+
+        try {
+            $this->expectException(RequestException::class);
+            app(GitHubReleaseSource::class)->stableTags('laravel/framework');
+        } finally {
+            Sleep::assertNeverSlept();
+            Http::assertSentCount(1);
+            Sleep::fake(false);
+        }
     }
 
     public function test_it_rejects_tar_path_traversal(): void
