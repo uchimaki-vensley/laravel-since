@@ -7,7 +7,6 @@ use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 
@@ -17,15 +16,14 @@ class FetchReleaseSource implements ShouldQueue
 
     public int $tries = 3;
 
+    public int $timeout = 360;
+
     public function __construct(public readonly int $releaseId) {}
 
     /** @return array<int, object> */
     public function middleware(): array
     {
-        return [
-            (new WithoutOverlapping('release-source-'.$this->releaseId))->releaseAfter(30)->expireAfter(3600),
-            new RateLimited('github'),
-        ];
+        return [(new WithoutOverlapping('release-source-'.$this->releaseId))->releaseAfter(30)->expireAfter(3600)];
     }
 
     public function handle(GitHubReleaseSource $source): void

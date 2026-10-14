@@ -92,7 +92,7 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 | Eloquent | 上記のモデル。リレーション・スコープ・enum キャスト |
 | マイグレーション | SQLite のスキーマ |
 | キュー（`Bus::batch` / `chain`） | 1 リリースの解析を「取得 → 解析 → 差分」のジョブに分ける。失敗時のリトライ・バックオフ |
-| ジョブミドルウェア | GitHub API へのレート制限（`RateLimited`）、二重実行の防止（`WithoutOverlapping`） |
+| ジョブミドルウェア / API クライアント | GitHub API の呼び出し間隔制御（`RateLimiter`）、二重実行の防止（`WithoutOverlapping`） |
 | HTTP クライアント | GitHub API・tarball の取得。リトライ、`Http::fake` によるテスト |
 | Process / Storage | 展開・一時ファイルの管理 |
 | スケジューラ | 新しいタグの定期チェック（VPS 移行後に効く） |

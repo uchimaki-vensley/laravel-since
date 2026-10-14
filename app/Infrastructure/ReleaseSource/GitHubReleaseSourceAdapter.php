@@ -4,9 +4,12 @@ namespace App\Infrastructure\ReleaseSource;
 
 use App\Application\Releases\GitHubReleaseSource;
 use App\Infrastructure\Persistence\Eloquent\Models\Release;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -22,10 +25,10 @@ class GitHubReleaseSourceAdapter implements GitHubReleaseSource
         $page = 1;
 
         do {
-            $response = $this->request()
-                ->retry(3, 1000)
-                ->get("/repos/{$owner}/{$repository}/tags", ['per_page' => 100, 'page' => $page])
-                ->throw();
+            $response = $this->getWithRetries(
+                "/repos/{$owner}/{$repository}/tags",
+                ['per_page' => 100, 'page' => $page],
+            );
             $batch = $response->json();
             if (! is_array($batch)) {
                 throw new RuntimeException('GitHub returned an invalid tag list.');
@@ -63,18 +66,17 @@ class GitHubReleaseSourceAdapter implements GitHubReleaseSource
         }
 
         try {
-            $response = $this->request()
-                ->retry(3, 1000)
-                ->withOptions([
+            $response = $this->getWithRetries(
+                "/repos/{$owner}/{$repository}/tarball/".rawurlencode($release->tag),
+                options: [
                     'sink' => $temporary,
                     'progress' => static function (float $downloadTotal, float $downloadedBytes) use ($maxDownloadBytes): void {
                         if ($downloadedBytes > $maxDownloadBytes) {
                             throw new RuntimeException('GitHub source archive exceeds the download limit.');
                         }
                     },
-                ])
-                ->get("/repos/{$owner}/{$repository}/tarball/".rawurlencode($release->tag))
-                ->throw();
+                ],
+            );
             $downloadSize = is_file($temporary) ? filesize($temporary) : false;
             if (! $response->successful() || ! is_int($downloadSize) || $downloadSize > $maxDownloadBytes) {
                 throw new RuntimeException('GitHub source archive exceeds the download limit or is missing.');
@@ -109,6 +111,49 @@ class GitHubReleaseSourceAdapter implements GitHubReleaseSource
         $token = config('since.github_token');
 
         return is_string($token) && $token !== '' ? $request->withToken($token) : $request;
+    }
+
+    /**
+     * @param  array<string, int|string>  $query
+     * @param  array<string, mixed>  $options
+     */
+    private function getWithRetries(string $url, array $query = [], array $options = []): Response
+    {
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $this->reserveGitHubRequest();
+
+            try {
+                $request = $this->request();
+                if ($options !== []) {
+                    $request = $request->withOptions($options);
+                }
+                $response = $request->get($url, $query);
+            } catch (ConnectionException $exception) {
+                if ($attempt === 3) {
+                    throw $exception;
+                }
+                usleep(1_000_000);
+
+                continue;
+            }
+
+            if (($response->serverError() || $response->status() === 429) && $attempt < 3) {
+                usleep(1_000_000);
+
+                continue;
+            }
+
+            return $response->throw();
+        }
+
+        throw new RuntimeException('Could not complete GitHub request.');
+    }
+
+    private function reserveGitHubRequest(): void
+    {
+        while (! RateLimiter::attempt('github-api', 30, static fn (): bool => true, 60)) {
+            sleep(max(1, RateLimiter::availableIn('github-api')));
+        }
     }
 
     /** @return array{string, string} */

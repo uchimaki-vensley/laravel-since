@@ -7,6 +7,7 @@ use Illuminate\Bus\PendingBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;
@@ -88,8 +89,63 @@ class SyncReleasesTest extends TestCase
         $this->assertFileDoesNotExist(dirname($destination).'/escape.txt');
     }
 
-    private function tarEntry(string $name, string $contents, string $type = '0', string $linkName = ''): string
+    public function test_it_extracts_a_valid_tarball(): void
     {
+        $base = storage_path('framework/testing/'.uniqid('archive-', true));
+        $archive = $base.'.tar.gz';
+        $destination = $base.'-out';
+        $contents = '<?php return 42;';
+        if (! is_dir(dirname($archive))) {
+            mkdir(dirname($archive), 0700, true);
+        }
+        file_put_contents($archive, gzencode($this->tarEntry('root/src/Sample.php', $contents)));
+
+        try {
+            (new SafeTarballExtractor)->extract($archive, $destination);
+            $this->assertSame($contents, file_get_contents($destination.'/src/Sample.php'));
+        } finally {
+            @unlink($archive);
+            File::deleteDirectory($destination);
+        }
+    }
+
+    public function test_it_counts_pax_metadata_against_the_archive_size_limit(): void
+    {
+        $base = storage_path('framework/testing/'.uniqid('archive-', true));
+        $archive = $base.'.tar';
+        $destination = $base.'-out';
+        $metadata = '15 path=root/a'."\n";
+        config(['since.max_archive_file_bytes' => 20, 'since.max_archive_bytes' => 20]);
+        if (! is_dir(dirname($archive))) {
+            mkdir(dirname($archive), 0700, true);
+        }
+        file_put_contents(
+            $archive,
+            $this->tarEntry('PaxHeaders.0/a', $metadata, 'x', '', false)
+                .$this->tarEntry('PaxHeaders.0/b', $metadata, 'x', '', false)
+                .$this->tarEntry('root/a', 'source'),
+        );
+
+        $rejected = false;
+        try {
+            (new SafeTarballExtractor)->extract($archive, $destination);
+        } catch (RuntimeException) {
+            $rejected = true;
+        } finally {
+            @unlink($archive);
+        }
+
+        $this->assertTrue($rejected, 'Expected aggregate PAX metadata size to be rejected.');
+        $this->assertDirectoryDoesNotExist($destination);
+    }
+
+    private function tarEntry(
+        string $name,
+        string $contents,
+        string $type = '0',
+        string $linkName = '',
+        bool $endArchive = true,
+    ): string {
         $header = str_pad($name, 100, "\0")
             .sprintf("%07o\0", 0644)
             .sprintf("%07o\0", 0)
@@ -106,6 +162,6 @@ class SyncReleasesTest extends TestCase
         $header = substr_replace($header, sprintf('%06o', $checksum)."\0 ", 148, 8);
         $paddedContents = str_pad($contents, (int) (ceil(strlen($contents) / 512) * 512), "\0");
 
-        return $header.$paddedContents.str_repeat("\0", 1024);
+        return $header.$paddedContents.($endArchive ? str_repeat("\0", 1024) : '');
     }
 }

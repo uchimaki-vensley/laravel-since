@@ -36,7 +36,11 @@ class SafeTarballExtractor
                     throw new RuntimeException('Archive contains too many entries.');
                 }
 
-                $name = $this->normalizeName($iterator->getSubPathname());
+                $subIterator = $iterator->getSubIterator();
+                if (! $subIterator instanceof \RecursiveDirectoryIterator) {
+                    throw new RuntimeException('Could not read archive entry path.');
+                }
+                $name = $this->normalizeName($subIterator->getSubPathname());
                 if ($name === '') {
                     continue;
                 }
@@ -163,6 +167,10 @@ class SafeTarballExtractor
                 if ($type === 'x' || $type === 'g') {
                     if ($size > $maxFileBytes) {
                         throw new RuntimeException('Archive metadata exceeds the allowed size.');
+                    }
+                    $totalBytes += $size;
+                    if ($totalBytes > $maxTotalBytes) {
+                        throw new RuntimeException('Archive expands beyond the allowed size.');
                     }
                     $metadata = $this->readTarBytes($stream, $size, $gzip);
                     foreach ($this->parsePaxMetadata($metadata) as $key => $value) {

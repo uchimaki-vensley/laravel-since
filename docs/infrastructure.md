@@ -36,6 +36,8 @@ VPS・常時動くサーバー・外部 DB は持たない（理由は context.m
 - `php artisan since:sync` は GitHub のタグ一覧から安定版を取得し、`SINCE_MINIMUM_VERSION`（既定 `11.0.0`）以降を `releases` に登録する。
 - `GITHUB_TOKEN` が設定されていれば GitHub API に使う。未設定でも同期できる。
 - 未解析リリースごとにダウンロードジョブをバッチ投入する。ジョブは `database` キューのワーカーで処理する。
+- GitHub API のレート制限に達した場合、ジョブを遅延キューへ戻さず、API クライアントがレート枠の回復を待ってからリクエストする。`queue:work --stop-when-empty` が全ジョブを処理し終えてから終了できるようにする。
+- 取得ジョブのタイムアウトは 360 秒、database キューの `retry_after` は 420 秒に設定し、レート制限待ち・HTTP リトライ中に予約が切れないようにする。
 - 展開済みソースは `storage/app/private/sources/`、ダウンロード中の tarball は処理後に削除する。tarball と展開後の合計サイズ、各ファイルサイズ、エントリ数に上限を設け、パス traversal・リンク・特殊ファイルを拒否する。
 - 取得ソースは展開のみ行い、PHP として読み込まない。
 

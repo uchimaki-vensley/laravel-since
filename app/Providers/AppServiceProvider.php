@@ -9,8 +9,6 @@ use App\Application\Releases\SyncReleases;
 use App\Application\Releases\SyncReleasesService;
 use App\Infrastructure\Persistence\Eloquent\EloquentReleaseRepository;
 use App\Infrastructure\ReleaseSource\GitHubReleaseSourceAdapter;
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use RuntimeException;
 
@@ -33,13 +31,5 @@ class AppServiceProvider extends ServiceProvider
 
             return new ReleaseSyncSettings($package, $minimumVersion);
         });
-    }
-
-    /**
-     * Bootstrap any application services.
-     */
-    public function boot(): void
-    {
-        RateLimiter::for('github', static fn (): Limit => Limit::perMinute(30)->by('github'));
     }
 }
