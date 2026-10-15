@@ -89,7 +89,8 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
   - 1 ファイル（既定 5MB）・展開後の合計（既定 200MB、gzip 爆弾対策）・エントリ数（既定 20,000）に上限を置く
   - ヘッダーのチェックサムを検証する。既存のパスへの書き込み（重複エントリ）は拒否する
   - 空の一時ディレクトリに展開し終えてから公開先へ rename する。失敗したら一時ディレクトリごと消す
-- 展開したファイルは `nikic/php-parser` で構文として読むだけで、`require` / `include` / オートロードしない
+- 展開したファイルは文字列として読み、`nikic/php-parser`（コード）と `phpstan/phpdoc-parser`（docblock）で構文として解析するだけにする。
+  `require` / `include` / `eval` / オートロードしない。解析時もシンボリックリンクはたどらない（実装は `App\Infrastructure\PhpSource\PhpSourceParser`）
 
 ## 開発時のルール（エージェントを含む）
 
