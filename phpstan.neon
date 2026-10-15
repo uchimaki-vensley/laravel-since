@@ -4,7 +4,8 @@ includes:
 parameters:
     level: max
 
-    # モデルの casts() の中身を読み、enum キャストなどの属性の型を正しく推論させる。
+    # モデルの casts() の中身から属性の型（enum・array など）を読む。
+    # 既定では casts() の戻り値の型（array<string, string>）しか見ないので、キャストした属性が string 扱いになる。
     parseModelCastsMethod: true
 
     paths:

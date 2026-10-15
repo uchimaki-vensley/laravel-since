@@ -59,17 +59,6 @@ final class ApiDiff
     }
 
     /**
-     * スナップショットに含まれるメソッドの名前。
-     *
-     * @param  list<TypeDeclaration>  $types
-     * @return list<SymbolName>
-     */
-    public static function symbols(array $types): array
-    {
-        return array_values(array_map(static fn (array $entry) => $entry[0], self::index($types)));
-    }
-
-    /**
      * 大文字小文字だけが違う名前は同じメソッドとして扱う（最初のものを使う）。
      *
      * @param  list<TypeDeclaration>  $types

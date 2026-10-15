@@ -35,10 +35,10 @@ final class EloquentReleaseChangeRepository implements ReleaseChangeRepository
         return $states;
     }
 
-    public function replace(ReleaseSummary $release, string $basis, array $symbols, array $changes): void
+    public function replace(ReleaseSummary $release, string $basis, array $changes): void
     {
-        DB::transaction(function () use ($release, $basis, $symbols, $changes) {
-            $ids = $this->symbolIds([...$symbols, ...array_map(static fn (MethodChange $change) => $change->symbol, $changes)]);
+        DB::transaction(function () use ($release, $basis, $changes) {
+            $ids = $this->symbolIds(array_map(static fn (MethodChange $change) => $change->symbol, $changes));
 
             SymbolChange::query()->where('release_id', $release->id)->delete();
 

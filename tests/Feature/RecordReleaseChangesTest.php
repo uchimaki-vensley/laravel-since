@@ -43,8 +43,11 @@ class RecordReleaseChangesTest extends TestCase
 
         RecordReleaseChanges::dispatch();
 
-        // 最初のリリースより前は解析していないので、最初のリリースには変化を記録せずシンボルだけを作る。
-        $this->assertSame(0, $base->symbolChanges()->count());
+        // 最初のリリースは、含まれるメソッドすべてを追加として記録する（「最初のリリース以前からある」の意味）。
+        $this->assertSame([
+            ['decrement', SymbolChangeKind::Added],
+            ['increment', SymbolChangeKind::Added],
+        ], $this->changes($base));
         $this->assertEqualsCanonicalizing(
             ['decrement', 'decrementEach', 'increment', 'incrementEach'],
             Symbol::query()->where('fqcn', self::BUILDER)->pluck('member')->all(),
@@ -55,7 +58,7 @@ class RecordReleaseChangesTest extends TestCase
             ['incrementEach', SymbolChangeKind::Added],
         ], $this->changes($next));
 
-        $added = SymbolChange::query()->whereRelation('symbol', 'member', 'incrementEach')->firstOrFail();
+        $added = $next->symbolChanges()->whereRelation('symbol', 'member', 'incrementEach')->firstOrFail();
         $this->assertNull($added->before);
         $this->assertSame([
             'signature' => 'incrementEach(array $columns, array $extra = []) [@param array<string, float|int|numeric-string> $columns, @param array<string, mixed> $extra, @return int]',
@@ -106,7 +109,7 @@ class RecordReleaseChangesTest extends TestCase
 
         RecordReleaseChanges::dispatch();
 
-        $this->assertSame(0, SymbolChange::query()->count());
+        $this->assertSame(0, $next->symbolChanges()->count());
         $this->assertNull($next->refresh()->changes_basis);
 
         ParseReleaseSource::dispatch($base->id);
@@ -135,7 +138,7 @@ class RecordReleaseChangesTest extends TestCase
         RecordReleaseChanges::dispatch();
 
         $this->assertNotSame($ids, SymbolChange::query()->orderBy('id')->pluck('id')->all());
-        $this->assertSame(2, SymbolChange::query()->count());
+        $this->assertSame(4, SymbolChange::query()->count());
         $this->assertSame($symbols, Symbol::query()->count());
     }
 

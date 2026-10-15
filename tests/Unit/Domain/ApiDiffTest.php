@@ -89,11 +89,11 @@ class ApiDiffTest extends TestCase
         $this->assertSame([['Illuminate\Support\Str::isAscii', SymbolChangeKind::SignatureChanged]], self::summary($changes));
     }
 
-    public function test_lists_the_symbols_of_a_snapshot(): void
+    public function test_everything_is_added_when_compared_with_an_empty_snapshot(): void
     {
-        $this->assertEquals(
-            [new SymbolName('A', 'run'), new SymbolName('B', 'stop')],
-            ApiDiff::symbols([self::type('A', [self::method('run')]), self::type('B', [self::method('stop')])]),
+        $this->assertSame(
+            [['A::run', SymbolChangeKind::Added], ['B::stop', SymbolChangeKind::Added]],
+            self::summary(ApiDiff::between([], [self::type('A', [self::method('run')]), self::type('B', [self::method('stop')])])),
         );
     }
 

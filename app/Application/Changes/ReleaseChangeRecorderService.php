@@ -33,15 +33,11 @@ final readonly class ReleaseChangeRecorderService implements ReleaseChangeRecord
             }
 
             if ($basis !== null && $basis !== $state->basis) {
+                // 最初のリリースは、含まれるメソッドすべてを追加として記録する（それより前は解析していないので
+                // 「最初のリリース以前からある」の意味になる）。
+                $before = $previous === null ? [] : $this->snapshot($previous->release, $loaded);
                 $after = $this->snapshot($state->release, $loaded);
-
-                if ($previous === null) {
-                    // 最初のリリースより前は解析していないので、変化は記録せずシンボルだけ作る。
-                    $this->changes->replace($state->release, $basis, ApiDiff::symbols($after), []);
-                } else {
-                    $before = $this->snapshot($previous->release, $loaded);
-                    $this->changes->replace($state->release, $basis, [], ApiDiff::between($before, $after));
-                }
+                $this->changes->replace($state->release, $basis, ApiDiff::between($before, $after));
 
                 $loaded = [$state->release->id => $after];
                 $recorded[] = $state->release;
