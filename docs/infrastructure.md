@@ -24,7 +24,8 @@ VPS・常時動くサーバー・外部 DB は持たない（理由は context.m
 
 1. main をチェックアウト（`persist-credentials: false`）
 2. PHP をセットアップし、`composer install --no-dev`
-3. `php artisan migrate` → `php artisan since:sync` → `php artisan since:build`
+3. `php artisan migrate` → `php artisan since:sync` → `php artisan queue:work --stop-when-empty` → `php artisan since:build`
+   （`since:sync` には環境変数 `GITHUB_TOKEN` として Actions の `GITHUB_TOKEN` を渡す）
 4. `wrangler pages deploy dist/ --project-name=laravel-since`（Direct Upload）
 
 - Cloudflare Pages の **Git 連携は使わない**。Git 連携だと PR ごとにプレビューのビルドが走るため、

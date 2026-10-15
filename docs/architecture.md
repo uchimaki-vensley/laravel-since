@@ -48,6 +48,18 @@ Infrastructure ────────────→ Application / Domain
 Issue #3 の配置では、enum を `App\Domain\Enums`、Eloquent モデルを
 `App\Infrastructure\Persistence\Eloquent\Models` に置く。
 
+Issue #4（リリースの同期とソースの取得）の配置:
+
+| 層 | クラス | 役割 |
+| --- | --- | --- |
+| Domain | `App\Domain\Releases\PackageName` / `Version` / `ReleaseTag` | パッケージ名・安定版のバージョン・タグの形式と比較 |
+| Application | `App\Application\Releases\ReleaseSynchronizer` / `ReleaseSourceFetcher`（実装は `*Service`） | 同期と取得のユースケース |
+| Application（ポート） | `ReleaseTagSource` / `SourceArchiveDownloader` / `ReleaseSourceStore` / `ReleaseRepository` | タグ一覧・tarball 取得・展開済みソースの置き場・永続化 |
+| Infrastructure | `App\Infrastructure\GitHub\*`、`ReleaseSources\LocalReleaseSourceStore`、`Archives\SafeTarGzExtractor`、`Persistence\Eloquent\Repositories\EloquentReleaseRepository` | GitHub HTTP、ローカルへの展開、tar の検証、Eloquent |
+| Presentation | `App\Console\Commands\SyncCommand`（`since:sync`）、`App\Jobs\FetchReleaseSource` | 入口とジョブ |
+
+設定値（`config/since.php`）は app/Providers で読み、コンストラクタ引数として Application / Infrastructure に渡す。
+
 ## データモデル（案）
 
 ```
@@ -76,6 +88,24 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
   `parameters(method_id, position)`、`symbols(fqcn, member)`、`symbol_changes(symbol_id, release_id, kind)`。
 - データ量の見積もり（要検証）: `laravel/framework` 1 リリースあたり数千メソッド。11.0 以降のリリース数 × それ。
   スナップショットが大きくなりすぎる場合は「変化があったときだけ行を持つ」形に切り替える。
+
+## リリースの同期とソースの取得（`since:sync`）
+
+1. GitHub API（`/repos/{package}/tags`）からタグを 100 件ずつ全ページ取得する。
+2. `v{major}.{minor}.{patch}` 形式の安定版のうち、`since.minimum_version`（既定 `11.0.0`）以上を `releases` に登録する。
+   登録済みのものは `insertOrIgnore` で無視するので、何度実行しても重複しない。
+3. 未解析（`parsed_at` が null）のリリースごとに `FetchReleaseSource` ジョブを作り、1 つの `Bus::batch` で投入する
+   （`allowFailures`: 1 リリースの失敗で他を止めない）。
+4. ジョブは codeload.github.com から tarball を取得し、検証しながら一時ディレクトリへ展開してから
+   `{since.sources.path}/{vendor}/{name}/{version}`（既定 `storage/app/sources/laravel/framework/13.3.0`）へ rename する。
+   解析（#5）は `ReleaseSourceStore::path()` でこのディレクトリを受け取る。
+
+- 同じリリースを二重に処理しない: 展開済みディレクトリがあれば何もしない。並行実行は `WithoutOverlapping`（キーはリリース ID）で直列にする。
+- レート制限: ジョブは `RateLimited('github')`（`since.github.jobs_per_minute`）。HTTP は接続失敗・429・5xx だけを再試行し、
+  403（レート制限の枯渇・認証エラー）は待っても直らないので失敗させる。
+- `GITHUB_TOKEN` があれば API 呼び出しに使う。なくても動く（未認証は 1 時間 60 回まで。全ページの取得に十数回使う）。
+  tarball の取得にはトークンを送らない。
+- 展開の検証規則は [security.md](security.md) の「取得したソースの扱い」を参照。
 
 ## 公開 API の範囲
 
