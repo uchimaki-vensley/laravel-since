@@ -12,7 +12,7 @@
  (タグ一覧)      │    ├─ 新しいタグを検出 ─▶ Bus::batch([...])                                                 │
                 │    │      FetchReleaseSource   リリースのソースを取得・展開（実行はしない）                     │
  codeload ────▶ │    │      ParseReleaseSource   nikic/php-parser で公開 API を抽出 → SQLite                    │
- (tarball)      │    │      DiffRelease          直前のリリースと比較 → 変更履歴                                │
+ (tarball)      │    │      RecordReleaseChanges 直前のリリースと比較 → 変更履歴                                │
                 │    └─ 完了イベント ─▶ 通知（自分宛て。任意）                                                  │
                 │                                                                                             │
                 │  php artisan since:build   Blade で静的な HTML / JSON を dist/ に書き出す                     │
@@ -23,6 +23,8 @@
 
 - Laravel は **バッチとして** 動く。Web サーバー（`php artisan serve`）は開発時のプレビューにだけ使う。
 - 本番に常時動くプロセスはない。キューは 1 回の実行の中で処理しきる（`database` ドライバ + `queue:work --stop-when-empty`）。
+- ワーカーは 1 つで動かす。ジョブの `timeout`（解析 600 秒、記録 1800 秒）が `database` ドライバの `retry_after`（既定 90 秒）より長いので、
+  ワーカーを増やす場合は先に `DB_QUEUE_RETRY_AFTER` を最長の `timeout` より長くする（実行中のジョブを別のワーカーが取り直さないように）。
 - スケジューラは `routes/console.php` に普通に定義し、Actions からは `php artisan schedule:run` ではなく
   目的のコマンドを直接呼ぶ。VPS に移したときは cron から `schedule:run` を呼ぶだけで同じ動きになる。
 
@@ -68,6 +70,16 @@ Issue #5（構文解析と公開 API の保存）の配置:
 | Infrastructure | `App\Infrastructure\PhpSource\PhpSourceParser` / `DocblockReader`、`Persistence\Eloquent\Repositories\EloquentApiSnapshotRepository` | nikic/php-parser・phpstan/phpdoc-parser、Eloquent |
 | Presentation | `App\Jobs\ParseReleaseSource` | ジョブ |
 
+Issue #6（変更履歴の記録と `since:diff`）の配置:
+
+| 層 | クラス | 役割 |
+| --- | --- | --- |
+| Domain | `App\Domain\Changes\ApiDiff` / `MethodChange` / `SymbolName` | 2 つのスナップショットの比較規則と、リリースをまたいだメソッドの同一性 |
+| Application | `App\Application\Changes\ReleaseChangeRecorder` / `ReleaseComparer`（実装は `*Service`）、`MethodSignatureFormatter` | 変更履歴の記録・2 リリースの比較のユースケース、シグネチャの文字列表現 |
+| Application（ポート） | `ReleaseChangeRepository`、`ApiSnapshotRepository::load()`、`ReleaseRepository::findByVersion()` | 記録の状態と変更履歴の保存、スナップショットの読み出し |
+| Infrastructure | `Persistence\Eloquent\Repositories\EloquentReleaseChangeRepository` | Eloquent |
+| Presentation | `App\Console\Commands\DiffCommand`（`since:diff`）、`App\Jobs\RecordReleaseChanges` | 入口とジョブ |
+
 設定値（`config/since.php`）は app/Providers で読み、コンストラクタ引数として Application / Infrastructure に渡す。
 
 ## データモデル（案）
@@ -80,8 +92,8 @@ releases            1 ──< types              1 ──< methods            1 
   tag (v13.3.0)           kind (class|interface    visibility               name
   released_at                   |trait|enum)       is_static                type (文字列表現)
   parsed_at               file_path                return_type              default_value (文字列表現)
-                          is_internal              docblock_return_type     is_variadic / by_ref
-                          is_deprecated            signature_hash           docblock_type
+  snapshot_revision       is_internal              docblock_return_type     is_variadic / by_ref
+  changes_basis           is_deprecated            signature_hash           docblock_type
                                                    source (declared|docblock)
                                                    is_internal / is_deprecated
 
@@ -94,7 +106,10 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 ```
 
 - `types` / `methods` / `parameters` はリリースごとのスナップショット。`symbols` はリリースをまたいで同じメソッドを指す ID。
-- 「いつから存在するか」は `symbol_changes` の `added` を見る。シグネチャの比較は `signature_hash` で絞り込んでから詳細を比べる。
+- 「いつから存在するか」は `symbol_changes` の `added` を見る。`added` がないシンボルは、記録している最初のリリース（`since.minimum_version`）以前からある。
+- シグネチャの変化は `signature_hash`（static か、戻り値・引数の名前・型・既定値・可変長・参照渡し、docblock の型）の違いで判定する。
+- `releases.snapshot_revision` はスナップショットを保存するたびに増える。`releases.changes_basis` はそのリリースの変更履歴を
+  どのスナップショット同士の比較で記録したか（`{直前のリリース ID}@{その版}:{このリリースの版}`、最初のリリースは `baseline:{版}`）。
 - `types.kind` / `methods.visibility` / `methods.source` / `symbol_changes.kind` は Domain の backed enum を Eloquent の enum キャストで保存する。
 - 一意キー: `releases(package, version)`、`types(release_id, fqcn)`、`methods(type_id, name)`、
   `parameters(method_id, position)`、`symbols(fqcn, member)`、`symbol_changes(symbol_id, release_id, kind)`。
@@ -106,8 +121,8 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 1. GitHub API（`/repos/{package}/tags`）からタグを 100 件ずつ全ページ取得する。
 2. `v{major}.{minor}.{patch}` 形式の安定版のうち、`since.minimum_version`（既定 `11.0.0`）以上を `releases` に登録する。
    登録済みのものは `insertOrIgnore` で無視するので、何度実行しても重複しない。
-3. 未解析（`parsed_at` が null）のリリースごとに `FetchReleaseSource` → `ParseReleaseSource` のチェーンを作り、
-   1 つの `Bus::batch` で投入する（`allowFailures`: 1 リリースの失敗で他を止めない）。
+3. 未解析（`parsed_at` が null）のリリースごとに `FetchReleaseSource` → `ParseReleaseSource` → `RecordReleaseChanges` のチェーンを作り、
+   1 つの `Bus::batch` で投入する（`allowFailures`: 1 リリースの失敗で他を止めない）。未解析のリリースがなければ `RecordReleaseChanges` だけを投入する。
 4. ジョブは codeload.github.com から tarball を取得し、検証しながら一時ディレクトリへ展開してから
    `{since.sources.path}/{vendor}/{name}/{version}`（既定 `storage/app/sources/laravel/framework/13.3.0`）へ rename する。
    解析（#5）は `ReleaseSourceStore::path()` でこのディレクトリを受け取る。
@@ -142,6 +157,43 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 - 同じ型が複数ある場合（`if` で分岐した宣言。例: `Illuminate\Testing\ParallelRunner`）は、パス順で最初の宣言を使う。
 - 継承したメソッドやトレイトから取り込んだメソッドは、宣言した型にだけ記録する（その型のメソッドとして展開しない）。
 
+## 変更履歴の記録（`RecordReleaseChanges`）と `since:diff`
+
+1. 登録済みのリリースをバージョン順に並べ、解析済みのリリースを直前のリリース（未解析を含めた登録済みの中で 1 つ前）と比べる。
+2. 比較は `ApiDiff`（Domain）で行う。型の完全修飾名とメソッド名の組（大文字小文字は区別しない）を同じメソッドとみなし、
+   - 追加（`added`）: 直前になく、このリリースにある。`after` にシグネチャを残す
+   - 削除（`removed`）: 直前にあり、このリリースにない（型ごと消えた場合や public でなくなった場合も含む）。`before` に残す
+   - シグネチャ変更（`signature_changed`）: `signature_hash` が違う。`before` / `after` の両方を残す
+   - 非推奨化（`deprecated`）: 直前では非推奨でなく、このリリースで非推奨（`@deprecated` / `#[\Deprecated]`）になった。`before` / `after` の両方を残す
+   を記録する。シグネチャ変更と非推奨化は同じリリースで両方起こりうる。
+3. 変化のあったメソッドの `symbols` を（なければ）作り、そのリリースの `symbol_changes` を置き換えて `changes_basis` を更新する（1 トランザクション）。
+4. 最初のリリースはそれより前を解析していないので、変化は記録せず、含まれるメソッドすべての `symbols` を作る。
+
+- 記録の対象・やり直しは `changes_basis` で決める。直前のリリースが変わった（間のリリースが後から登録された）とき、
+  どちらかのスナップショットが再解析で置き換わったときは値が変わるので記録し直す。同じなら何もしない（何度動かしても同じ結果）。
+- 直前のリリースが未解析なら、そのリリースは記録しない（間を飛ばして比べると、変化の起きたリリースを誤るため）。直前が解析されたあとの記録で記録する。
+- `since:sync` は各リリースのチェーンの最後に `RecordReleaseChanges` を置く。記録はパッケージ全体を見るので、解析が終わる順番に
+  関係なく、最後に動いた記録ジョブがすべてを記録する。重なった記録ジョブは `WithoutOverlapping` で待たせ、捨てない。
+  未解析のリリースがないときも `RecordReleaseChanges` だけを投入し、前回記録できなかった分を記録する。
+- バージョン順は版番号の比較だけで決める（ブランチの分岐は見ない）。例えば 12.x の修正リリースが 13.0.0 より後に出ても、直前は版番号で 1 つ前のもの。
+- `before` / `after` の JSON:
+
+  ```json
+  {
+    "signature": "incrementEach(array $columns, array $extra = []) [@param array<string, float|int|numeric-string> $columns, @param array<string, mixed> $extra, @return int]",
+    "name": "incrementEach", "source": "declared", "is_static": false,
+    "return_type": null, "docblock_return_type": "int",
+    "parameters": [{"name": "columns", "type": "array", "default_value": null, "is_variadic": false, "by_ref": false,
+                    "docblock_type": "array<string, float|int|numeric-string>"}, ...],
+    "is_internal": false, "is_deprecated": false
+  }
+  ```
+
+  `signature` は `MethodSignatureFormatter` の形式。宣言メソッドはネイティブの型で書き、docblock の型を末尾の `[...]` にまとめる。
+  docblock の `@method` は `@method static make(string|null $name = null): static` のように docblock の型で書く。
+- `php artisan since:diff {from} {to}`（例: `since:diff 13.2.0 13.3.0`）は、解析済みの 2 リリースのスナップショットを直接比べて表示する
+  （記録とは別に計算する。隣り合わないリリース同士や、逆向きも比べられる）。`v` 付きのタグ名も受け付ける。
+
 ## 公開 API の範囲
 
 - 対象: `src/Illuminate/` 配下の `public` メソッド（クラス・インターフェース・トレイト・enum）。
@@ -164,7 +216,7 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 | Artisan コマンド | `since:sync`、`since:build`、`since:diff {from} {to}` など |
 | Blade コンポーネント | 静的サイトのページ |
 | テスト | PHPUnit（Pest は入れない）。`Http::fake`・`Bus::fake`・`Queue::fake` |
-| Larastan | レベル `max`・ベースラインなしで自分のコードを検査する（`phpstan.neon`、CI で実行） |
+| Larastan | レベル `max`・ベースラインなしで自分のコードを検査する（`phpstan.neon`、CI で実行）。モデルの `casts()` を読ませて enum キャストの型を推論させる（`parseModelCastsMethod`） |
 
 ## ソース解析の方針
 

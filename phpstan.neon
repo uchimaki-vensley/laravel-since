@@ -4,6 +4,9 @@ includes:
 parameters:
     level: max
 
+    # モデルの casts() の中身を読み、enum キャストなどの属性の型を正しく推論させる。
+    parseModelCastsMethod: true
+
     paths:
         - app/
         - bootstrap/app.php

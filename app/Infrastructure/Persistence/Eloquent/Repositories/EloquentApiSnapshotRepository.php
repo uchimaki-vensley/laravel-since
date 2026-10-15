@@ -6,6 +6,7 @@ use App\Application\Releases\ApiSnapshotRepository;
 use App\Application\Releases\ReleaseSummary;
 use App\Domain\Api\MethodDeclaration;
 use App\Domain\Api\ParameterDeclaration;
+use App\Domain\Api\TypeDeclaration;
 use App\Infrastructure\Persistence\Eloquent\Models\Method;
 use App\Infrastructure\Persistence\Eloquent\Models\Parameter;
 use App\Infrastructure\Persistence\Eloquent\Models\Release;
@@ -36,7 +37,70 @@ final class EloquentApiSnapshotRepository implements ApiSnapshotRepository
                 }
             }
 
-            Release::query()->whereKey($release->id)->update(['parsed_at' => now()]);
+            Release::query()->whereKey($release->id)->increment('snapshot_revision', 1, ['parsed_at' => now()]);
+        });
+    }
+
+    public function load(ReleaseSummary $release): ?array
+    {
+        // 読んでいる途中で再解析に置き換えられても混ざらないよう、1 トランザクションで読む。
+        return DB::transaction(function () use ($release) {
+            if (! Release::query()->whereKey($release->id)->whereNotNull('parsed_at')->exists()) {
+                return null;
+            }
+
+            $parameters = [];
+
+            foreach (Parameter::query()
+                ->whereIn('method_id', Method::query()->select('methods.id')
+                    ->join('types', 'types.id', '=', 'methods.type_id')
+                    ->where('types.release_id', $release->id))
+                ->orderBy('method_id')
+                ->orderBy('position')
+                ->get() as $parameter) {
+                $parameters[$parameter->method_id][] = new ParameterDeclaration(
+                    $parameter->position,
+                    $parameter->name,
+                    $parameter->type,
+                    $parameter->default_value,
+                    $parameter->is_variadic,
+                    $parameter->by_ref,
+                    $parameter->docblock_type,
+                );
+            }
+
+            $methods = [];
+
+            foreach (Method::query()
+                ->whereIn('type_id', Type::query()->select('id')->where('release_id', $release->id))
+                ->orderBy('id')
+                ->get() as $method) {
+                $methods[$method->type_id][] = new MethodDeclaration(
+                    $method->name,
+                    $method->visibility,
+                    $method->is_static,
+                    $method->return_type,
+                    $method->docblock_return_type,
+                    $parameters[$method->id] ?? [],
+                    $method->source,
+                    $method->is_internal,
+                    $method->is_deprecated,
+                );
+            }
+
+            return array_values(Type::query()
+                ->where('release_id', $release->id)
+                ->orderBy('id')
+                ->get()
+                ->map(static fn (Type $type) => new TypeDeclaration(
+                    $type->fqcn,
+                    $type->kind,
+                    $type->file_path,
+                    $type->is_internal,
+                    $type->is_deprecated,
+                    $methods[$type->id] ?? [],
+                ))
+                ->all());
         });
     }
 
