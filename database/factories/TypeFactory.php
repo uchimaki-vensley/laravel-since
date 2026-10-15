@@ -19,6 +19,8 @@ class TypeFactory extends Factory
             'fqcn' => 'App\\Types\\'.fake()->unique()->lexify('Type????'),
             'kind' => TypeKind::ClassType,
             'file_path' => 'src/Illuminate/Example.php',
+            'is_internal' => false,
+            'is_deprecated' => false,
         ];
     }
 }

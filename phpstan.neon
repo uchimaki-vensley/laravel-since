@@ -12,4 +12,7 @@ parameters:
         - routes/
         - tests/
 
+    excludePaths:
+        # 解析対象のソースを模したフィクスチャ。構文解析の入力としてだけ使い、実行しない。
+        - tests/Fixtures/*
     tmpDir: storage/framework/cache/phpstan

@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\Eloquent\Models;
 
+use App\Domain\Enums\MethodSource;
 use App\Domain\Enums\Visibility;
 use Database\Factories\MethodFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['type_id', 'name', 'visibility', 'is_static', 'return_type', 'docblock_return_type', 'signature_hash'])]
+#[Fillable(['type_id', 'name', 'visibility', 'is_static', 'return_type', 'docblock_return_type', 'signature_hash', 'source', 'is_internal', 'is_deprecated'])]
 class Method extends Model
 {
     /** @use HasFactory<MethodFactory> */
@@ -41,6 +42,9 @@ class Method extends Model
         return [
             'visibility' => Visibility::class,
             'is_static' => 'boolean',
+            'source' => MethodSource::class,
+            'is_internal' => 'boolean',
+            'is_deprecated' => 'boolean',
         ];
     }
 }

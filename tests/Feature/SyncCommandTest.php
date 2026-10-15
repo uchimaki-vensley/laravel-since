@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Infrastructure\Persistence\Eloquent\Models\Release;
 use App\Jobs\FetchReleaseSource;
+use App\Jobs\ParseReleaseSource;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -55,22 +56,26 @@ class SyncCommandTest extends TestCase
         Http::assertSentCount(2);
     }
 
-    public function test_queues_one_batch_with_a_job_per_unparsed_release(): void
+    public function test_queues_one_batch_with_a_fetch_and_parse_chain_per_unparsed_release(): void
     {
         Release::factory()->create(['version' => '11.0.0', 'tag' => 'v11.0.0', 'parsed_at' => now()]);
         Http::fake([self::TAGS_URL => self::tags(['v11.0.1', 'v11.0.0', 'v11.1.0'])]);
 
         $this->sync()
             ->expectsOutputToContain('Registered 2 new release(s).')
-            ->expectsOutputToContain('Queued 2 source fetch job(s)')
+            ->expectsOutputToContain('Queued fetch and parse jobs for 2 release(s)')
             ->assertSuccessful();
 
         $expected = Release::query()->whereIn('version', ['11.0.1', '11.1.0'])->orderBy('version')->pluck('id')->all();
 
         Bus::assertBatched(function (PendingBatch $batch) use ($expected) {
-            $ids = $batch->jobs->map(fn (mixed $job) => $job instanceof FetchReleaseSource ? $job->releaseId : null)->all();
+            $chains = $batch->jobs->map(fn (mixed $chain) => is_array($chain) && count($chain) === 2
+                && $chain[0] instanceof FetchReleaseSource && $chain[1] instanceof ParseReleaseSource
+                && $chain[0]->releaseId === $chain[1]->releaseId
+                    ? $chain[0]->releaseId
+                    : null)->all();
 
-            return $batch->name === 'since:sync' && $batch->allowsFailures() && $ids === $expected;
+            return $batch->name === 'since:sync' && $batch->allowsFailures() && $chains === $expected;
         });
     }
 

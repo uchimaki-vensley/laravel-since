@@ -2,21 +2,27 @@
 
 namespace App\Providers;
 
+use App\Application\Releases\ApiSnapshotRepository;
 use App\Application\Releases\ReleaseRepository;
 use App\Application\Releases\ReleaseSourceFetcher;
 use App\Application\Releases\ReleaseSourceFetcherService;
+use App\Application\Releases\ReleaseSourceParser;
+use App\Application\Releases\ReleaseSourceParserService;
 use App\Application\Releases\ReleaseSourceStore;
 use App\Application\Releases\ReleaseSynchronizer;
 use App\Application\Releases\ReleaseSynchronizerService;
 use App\Application\Releases\ReleaseTagSource;
 use App\Application\Releases\SourceArchiveDownloader;
+use App\Application\Releases\SourceParser;
 use App\Domain\Releases\PackageName;
 use App\Domain\Releases\Version;
 use App\Infrastructure\Archives\SafeTarGzExtractor;
 use App\Infrastructure\GitHub\GitHubHttp;
 use App\Infrastructure\GitHub\GitHubReleaseTagSource;
 use App\Infrastructure\GitHub\GitHubSourceArchiveDownloader;
+use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentApiSnapshotRepository;
 use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentReleaseRepository;
+use App\Infrastructure\PhpSource\PhpSourceParser;
 use App\Infrastructure\ReleaseSources\LocalReleaseSourceStore;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
@@ -71,6 +77,10 @@ class AppServiceProvider extends ServiceProvider
         ));
 
         $this->app->bind(ReleaseSourceFetcher::class, ReleaseSourceFetcherService::class);
+
+        $this->app->bind(SourceParser::class, PhpSourceParser::class);
+        $this->app->bind(ApiSnapshotRepository::class, EloquentApiSnapshotRepository::class);
+        $this->app->bind(ReleaseSourceParser::class, ReleaseSourceParserService::class);
     }
 
     /**

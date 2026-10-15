@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['release_id', 'fqcn', 'kind', 'file_path'])]
+#[Fillable(['release_id', 'fqcn', 'kind', 'file_path', 'is_internal', 'is_deprecated'])]
 class Type extends Model
 {
     /** @use HasFactory<TypeFactory> */
@@ -40,6 +40,8 @@ class Type extends Model
     {
         return [
             'kind' => TypeKind::class,
+            'is_internal' => 'boolean',
+            'is_deprecated' => 'boolean',
         ];
     }
 }
