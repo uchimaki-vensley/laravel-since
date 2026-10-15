@@ -49,6 +49,7 @@ node scripts/devenv.mjs up        # 起動（composer install → migrate → ph
 node scripts/devenv.mjs info      # 割当ポートと URL を表示
 node scripts/devenv.mjs compose exec app php artisan test
 node scripts/devenv.mjs compose exec app vendor/bin/pint
+node scripts/devenv.mjs compose exec app php artisan since:build   # 静的サイトを dist/ に書き出す
 node scripts/devenv.mjs stop      # 停止（ポートは保持）
 node scripts/devenv.mjs down      # 削除（ボリュームとポートも解放）
 ```

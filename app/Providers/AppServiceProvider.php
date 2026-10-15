@@ -14,6 +14,11 @@ use App\Application\Releases\ReleaseSynchronizerService;
 use App\Application\Releases\ReleaseTagSource;
 use App\Application\Releases\SourceArchiveDownloader;
 use App\Application\Releases\SourceParser;
+use App\Application\Site\SiteBuilder;
+use App\Application\Site\SiteBuilderService;
+use App\Application\Site\SiteCatalog;
+use App\Application\Site\SiteOutput;
+use App\Application\Site\SiteRenderer;
 use App\Domain\Releases\PackageName;
 use App\Domain\Releases\Version;
 use App\Infrastructure\Archives\SafeTarGzExtractor;
@@ -22,8 +27,11 @@ use App\Infrastructure\GitHub\GitHubReleaseTagSource;
 use App\Infrastructure\GitHub\GitHubSourceArchiveDownloader;
 use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentApiSnapshotRepository;
 use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentReleaseRepository;
+use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentSiteCatalog;
 use App\Infrastructure\PhpSource\PhpSourceParser;
 use App\Infrastructure\ReleaseSources\LocalReleaseSourceStore;
+use App\Infrastructure\Site\BladeSiteRenderer;
+use App\Infrastructure\Site\LocalSiteOutput;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Filesystem\Filesystem;
@@ -81,6 +89,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SourceParser::class, PhpSourceParser::class);
         $this->app->bind(ApiSnapshotRepository::class, EloquentApiSnapshotRepository::class);
         $this->app->bind(ReleaseSourceParser::class, ReleaseSourceParserService::class);
+
+        $this->app->bind(SiteCatalog::class, EloquentSiteCatalog::class);
+        $this->app->bind(SiteRenderer::class, BladeSiteRenderer::class);
+        $this->app->bind(SiteOutput::class, fn (Application $app) => new LocalSiteOutput(
+            $app->make(Filesystem::class),
+            Config::string('since.site.assets_path'),
+            Config::string('since.site.path'),
+        ));
+        $this->app->bind(SiteBuilder::class, fn (Application $app) => new SiteBuilderService(
+            $app->make(SiteCatalog::class),
+            $app->make(SiteRenderer::class),
+            $app->make(SiteOutput::class),
+            new PackageName(Config::string('since.package')),
+        ));
     }
 
     /**

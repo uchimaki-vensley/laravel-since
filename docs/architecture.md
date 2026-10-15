@@ -68,6 +68,15 @@ Issue #5（構文解析と公開 API の保存）の配置:
 | Infrastructure | `App\Infrastructure\PhpSource\PhpSourceParser` / `DocblockReader`、`Persistence\Eloquent\Repositories\EloquentApiSnapshotRepository` | nikic/php-parser・phpstan/phpdoc-parser、Eloquent |
 | Presentation | `App\Jobs\ParseReleaseSource` | ジョブ |
 
+Issue #7（静的サイトの出力）の配置:
+
+| 層 | クラス | 役割 |
+| --- | --- | --- |
+| Application | `App\Application\Site\SiteBuilder`（実装は `SiteBuilderService`）、`SitePaths`、`SignatureFormatter`、`Pages\*` | サイトを作るユースケース。URL とファイルの置き場所、シグネチャの表示、ページの内容 |
+| Application（ポート） | `SiteCatalog` / `SiteRenderer` / `SiteOutput` / `SiteFiles` | DB の読み出し・HTML への変換・出力先の置き換え・ファイルの書き込み |
+| Infrastructure | `Persistence\Eloquent\Repositories\EloquentSiteCatalog`、`Site\BladeSiteRenderer`、`Site\LocalSiteOutput` / `LocalSiteFiles` | Eloquent、Blade（`resources/views/site`）、ローカルのファイル |
+| Presentation | `App\Console\Commands\BuildCommand`（`since:build`） | 入口 |
+
 設定値（`config/since.php`）は app/Providers で読み、コンストラクタ引数として Application / Infrastructure に渡す。
 
 ## データモデル（案）
@@ -175,18 +184,38 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 - tarball の展開はパストラバーサル（`../` や絶対パス、シンボリックリンク）を拒否する。
 - 型の文字列表現は、ネイティブ型と docblock の型を別々に持つ（Larastan のスタブとの比較では docblock 側が要る）。
 
-## 静的サイトの出力（案）
+## 静的サイトの出力（`since:build`）
 
 ```
 dist/
-  index.html                      検索ページ（search.json をブラウザで絞り込む）
-  search.json                     全シンボルの軽量インデックス
-  releases/{version}/index.html   そのリリースで追加・削除・変更されたもの
-  types/{fqcn}/index.html         クラスごとのメソッド一覧と各メソッドの「いつから」
-  _headers                        セキュリティヘッダー（CSP など。security.md 参照）
+  index.html                       検索ページ（search.json をブラウザで絞り込む）とリリース一覧
+  search.json                      型とメソッドの軽量な一覧
+  releases/{version}/index.html    そのリリースで追加・削除・変更・非推奨になったもの
+  types/{名前空間を / で区切った型名}/index.html
+                                   型ごとのメソッド一覧と、各メソッドの「いつから」と変更履歴
+                                   （例: types/Illuminate/Database/Eloquent/Builder/）
+  assets/                          site.css・search.js・favicon.svg（resources/site からそのまま写す）
+  _headers                         セキュリティヘッダー（CSP など。security.md 参照）
+  .since-site                      since:build が書いた出力であることの印
 ```
 
+- 対象は解析済み（`parsed_at` あり）のリリース。型のページは **最新のリリースのスナップショット** と **全リリースの `symbol_changes`** から作る。
+  最新のリリースにない型・メソッドも、変更履歴があればページに載せる（「v… で削除」と表示）。
+- 「いつから」は、そのメソッドの最後の `added` のリリース。解析した最も古いリリース（既定 11.0.0）と同じなら「v… 以前から」と表示する
+  （それより前のリリースは解析していないため）。`added` がなければ「追加の記録なし」。
+- 起点のリリースのページは、全メソッドが `added` になるので件数だけ出して一覧を省く。
+- `symbol_changes.before` / `after` は `{"signature": "…"}` の `signature` を表示用のシグネチャとして使う（#6 が書く形）。
+- シグネチャは 1 行で表示する（例: `static slug(string $title, string $separator = '-'): string`）。宣言されたメソッドはネイティブの型、
+  `@method` は docblock の型を使い、宣言されたメソッドの docblock の型は `@param` / `@return` として別に表示する。
+- `@internal` のメソッドは型のページで畳んで表示し、検索では既定で除く（チェックボックスで含められる）。
+- `search.json` は `{"latest": "13.36.0", "types": [[型名, 印]], "members": [[型の添字, メソッド名, いつから, 印]]}`。
+  印はビットの組み合わせ（1: `@internal`、2: 非推奨、4: 最新のリリースにない、8: `@method`、16: 「以前から」）。
+  13.36.0 の 1 リリースで約 510KB（gzip で約 80KB）。
+- 出力は `since.site.path`（環境変数 `SINCE_SITE_PATH`、既定 `dist/`）。同じ親ディレクトリの一時ディレクトリに書き終えてから rename で置き換える。
+  誤った設定で無関係なディレクトリを消さないよう、既存の出力先は空か `.since-site` がある場合だけ置き換える。
 - サイトにユーザー入力を受け取るフォームやサーバー処理はない。検索はブラウザ内で完結する。
+- 実測（13.35.0 / 13.36.0 の 2 リリース）: 1,646 型・13,068 メソッドで 1,655 ファイル・約 26MB、メモリのピーク約 75MB。
+  スナップショットと変更履歴は 200 件（変更履歴は 2,000 件）ずつ読み、Eloquent のモデルをまとめて持たない。
 
 ## 未決事項
 
