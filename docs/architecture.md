@@ -136,9 +136,14 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 - docblock は `phpstan/phpdoc-parser` で読む。`@param` / `@return` / `@method` / `@internal` / `@deprecated` を使う
   （`@phpstan-*` / `@psalm-*` は見ない）。書式が壊れていて読めない docblock は、型情報がないものとして扱う。
 - `#[\Deprecated]` 属性も `is_deprecated` として記録する。
-- 同じ型の中で名前（大文字小文字を区別しない）が重なるメソッドは 1 つにまとめ、宣言されたメソッドを `@method` より優先する。
-  実例: v13.36.0 の `Illuminate\Routing\RouteRegistrar::metadata`（`@method` と実メソッドの両方がある）。
-  扱いを見直すかは Issue #11 で決める。
+- 同じ型の中で名前（大文字小文字を区別しない）が重なるメソッドは 1 つにまとめ、`public` の宣言メソッドを `@method` より優先する
+  （Issue #11 で決定。`@method` 側の情報は保存しない）。
+  - 理由: PHP は外から呼べる宣言メソッドがあればそれを呼び、`__call` / `__callStatic` には来ない。`@method` は同じメソッドの説明に
+    すぎず、実際のシグネチャは宣言側にある。別々に持つと同じ呼び出しが 2 行になり、差分（#6）で同じ変化を二重に数える。
+  - 宣言メソッドが `protected` / `private` の場合は外から呼ぶと `__call` に転送されるので、`@method` を公開 API として記録する。
+  - 実例: v13.36.0 の `Illuminate\Routing\RouteRegistrar::metadata`（`__call` で受ける属性の一覧と `@method` に載ったまま、
+    同名の `public` メソッドが追加された）。v11.0.0 / v12.0.0 / v13.0.0 / v13.36.0 を調べて、該当はこの 1 件だけ。
+    抜粋を `tests/Fixtures/LaravelExcerpts` に置いてテストしている。
 - 同じ型が複数ある場合（`if` で分岐した宣言。例: `Illuminate\Testing\ParallelRunner`）は、パス順で最初の宣言を使う。
 - 継承したメソッドやトレイトから取り込んだメソッドは、宣言した型にだけ記録する（その型のメソッドとして展開しない）。
 
@@ -171,7 +176,7 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 - 取得したソースは **信頼できない入力** として扱う。`require` / `include` / `eval` / オートロードで読み込まない。
   `nikic/php-parser` で構文木にして読むだけにする。docblock は `phpstan/phpdoc-parser` で読む。
 - テストのフィクスチャ（`tests/Fixtures/`）も同じく構文解析の入力としてだけ使う。Composer のクラスマップ（`exclude-from-classmap`）と
-  Larastan（`excludePaths`）の対象から外している。
+  Larastan（`excludePaths`）の対象から外している。書かれたとおりの docblock を解析の入力にするので、Pint（`pint.json` の `exclude`）でも整形しない。
 - tarball の展開はパストラバーサル（`../` や絶対パス、シンボリックリンク）を拒否する。
 - 型の文字列表現は、ネイティブ型と docblock の型を別々に持つ（Larastan のスタブとの比較では docblock 側が要る）。
 

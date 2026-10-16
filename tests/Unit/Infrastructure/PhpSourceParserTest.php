@@ -47,7 +47,7 @@ class PhpSourceParserTest extends TestCase
         $this->assertSame(['render'], $this->methodNames('Illuminate\Fixture\Contracts\Renderable'));
         $this->assertSame([
             '__construct', 'configure', 'intersect', 'render', 'internalHelper', 'legacy',
-            'attributeDeprecated', 'brokenDocblock', 'anonymous', 'make', 'names', 'forward',
+            'attributeDeprecated', 'brokenDocblock', 'anonymous', 'make', 'names', 'forward', 'hidden',
         ], $this->methodNames('Illuminate\Fixture\Widget'));
     }
 
@@ -121,6 +121,40 @@ class PhpSourceParserTest extends TestCase
         $this->assertSame('string', $render->returnType);
         // 大文字小文字だけが違う @method FORWARD() は forward と同じメソッドとして 1 つにまとめる。
         $this->assertNotContains('FORWARD', $this->methodNames('Illuminate\Fixture\Widget'));
+    }
+
+    public function test_keeps_the_docblock_method_when_the_declared_method_with_the_same_name_is_not_public(): void
+    {
+        // protected hidden() は外から呼ぶと __call に転送されるので、@method int hidden() が公開 API になる。
+        $hidden = $this->method('Illuminate\Fixture\Widget', 'hidden');
+
+        $this->assertSame(MethodSource::Docblock, $hidden->source);
+        $this->assertSame('int', $hidden->docblockReturnType);
+    }
+
+    public function test_merges_the_route_registrar_metadata_method_of_laravel_13_36_into_the_declared_method(): void
+    {
+        $types = (new PhpSourceParser(new DocblockReader))->parse(__DIR__.'/../../Fixtures/LaravelExcerpts');
+
+        $this->assertCount(1, $types);
+        $this->assertSame('Illuminate\Routing\RouteRegistrar', $types[0]->fqcn);
+        $this->assertSame(
+            [
+                ['attribute', MethodSource::Declared],
+                ['metadata', MethodSource::Declared],
+                ['__call', MethodSource::Declared],
+                ['get', MethodSource::Docblock],
+                ['as', MethodSource::Docblock],
+                ['middleware', MethodSource::Docblock],
+            ],
+            array_map(fn (MethodDeclaration $method) => [$method->name, $method->source], $types[0]->methods),
+        );
+
+        $metadata = $types[0]->methods[1];
+        $this->assertNull($metadata->returnType);
+        $this->assertSame('$this', $metadata->docblockReturnType);
+        $this->assertEquals([new ParameterDeclaration(0, 'metadata', 'array', null, false, false, 'array')], $metadata->parameters);
+        $this->assertFalse(class_exists('Illuminate\Routing\RouteRegistrar', false));
     }
 
     public function test_ignores_a_docblock_it_cannot_parse(): void
