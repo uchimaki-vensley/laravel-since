@@ -70,11 +70,17 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 
 ## 配信サイト（Cloudflare Pages）
 
-- `dist/_headers` で次のヘッダーを付ける（`since:build` が出力する）
-  - `Content-Security-Policy`: 自サイトのスクリプトとスタイルだけを許可（インラインスクリプト禁止）
+- `dist/_headers` で次のヘッダーを付ける（`since:build` が `resources/site/_headers` を出力する）
+  - `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+    （自サイトのスクリプト・スタイル・画像と、`search.json` の取得だけを許可。インラインスクリプト・インラインスタイルは使わない）
   - `X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`X-Frame-Options: DENY`
-- 外部の CDN からスクリプトを読み込まない（必要なものはビルドに同梱する）
-- Blade の出力は常にエスケープする（`{!! !!}` を使わない。使う場合は理由をコメントに書く）
+- 外部の CDN からスクリプト・スタイル・フォントを読み込まない（必要なものは `resources/site/assets` に置いて同梱する）
+- Blade の出力は常にエスケープする（`{!! !!}` を使わない。使う場合は理由をコメントに書く）。
+  解析したソース由来の文字列（型・既定値・docblock）も `{{ }}` で出す
+- 検索（`assets/search.js`）は結果を `textContent` で組み立て、`innerHTML` を使わない
+- 型名から作るページのパスは、PHP の識別子（ASCII）を `\` でつないだ名前に限る。それ以外の名前はページにせず警告を出す。
+  書き込みは出力ディレクトリの中の相対パス（`.` で始まるセグメント・空のセグメント・バックスラッシュを含まないもの）に限り、既存のファイルを上書きしない
+  （実装は `App\Application\Site\SitePaths`、`App\Infrastructure\Site\LocalSiteFiles`）
 
 ## 取得したソースの扱い
 

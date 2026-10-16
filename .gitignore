@@ -28,3 +28,7 @@ Thumbs.db
 
 # devenv（scripts/devenv.mjs が生成）
 .env.devenv
+
+# since:build の出力と、書き出し途中の一時ディレクトリ
+/dist
+/.dist.*
