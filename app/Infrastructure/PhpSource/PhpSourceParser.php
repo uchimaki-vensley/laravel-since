@@ -137,6 +137,8 @@ final readonly class PhpSourceParser implements SourceParser
             }
         }
 
+        // 同名の public メソッドがあれば TypeDeclaration が @method 側を捨てる。protected / private の同名メソッドは
+        // 外から呼ぶと __call に転送されるので、@method を公開 API として残す。
         foreach ($docblock->methods as $method) {
             $methods[] = $method;
         }
