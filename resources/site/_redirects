@@ -1,0 +1,3 @@
+/ /en/ 301
+/types/* /ja/types/:splat 301
+/releases/* /ja/releases/:splat 301

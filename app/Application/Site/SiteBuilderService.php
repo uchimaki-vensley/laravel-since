@@ -20,9 +20,9 @@ use App\Domain\Releases\PackageName;
 /**
  * 最新のリリースのスナップショットと全リリースの変更履歴から、静的サイトを作る。
  *
- * - トップ（検索）: `index.html` と、ブラウザ内で絞り込む `search.json`
- * - リリースごとの変更一覧: `releases/{version}/index.html`
- * - 型ごとのメソッド一覧: `types/{名前空間を / で区切った型名}/index.html`
+ * - トップ（検索）: `{locale}/index.html` と、共通の `search.json`
+ * - リリースごとの変更一覧: `{locale}/releases/{version}/index.html`
+ * - 型ごとのメソッド一覧: `{locale}/types/{名前空間を / で区切った型名}/index.html`
  */
 final readonly class SiteBuilderService implements SiteBuilder
 {
@@ -106,33 +106,42 @@ final readonly class SiteBuilderService implements SiteBuilder
         $memberCount = array_sum(array_map(static fn (TypePage $page) => count($page->members) + count($page->internalMembers), $typePages));
 
         $this->output->replace(function (SiteFiles $files) use ($releases, $links, $changesByVersion, $directories, $typePages, $latest, $oldest, $memberCount) {
+            foreach (SiteLocale::cases() as $locale) {
+                $prefix = $locale->value.'/';
+                $files->write($prefix.'index.html', $this->renderer->index(new IndexPage(
+                    $latest === null ? null : (string) $latest->tag->version,
+                    $oldest === null ? null : (string) $oldest->tag->version,
+                    count($typePages),
+                    $memberCount,
+                    array_reverse(array_values($links)),
+                ), $locale));
+
+                foreach ($releases as $index => $release) {
+                    $version = (string) $release->tag->version;
+                    $previous = $releases[$index - 1] ?? null;
+                    $next = $releases[$index + 1] ?? null;
+
+                    $files->write($prefix.SitePaths::page(SitePaths::releaseDirectory($release->tag->version)), $this->renderer->release(new ReleasePage(
+                        $links[$version],
+                        $previous === null ? null : $links[(string) $previous->tag->version],
+                        $next === null ? null : $links[(string) $next->tag->version],
+                        // 解析の起点のリリースでは、その時点のメソッドがすべて「追加」になるので一覧を省く。
+                        $this->sections($changesByVersion[$version] ?? [], $directories, $typePages, omitAdded: $index === 0),
+                    ), $locale));
+                }
+
+                foreach ($typePages as $fqcn => $page) {
+                    $files->write($prefix.SitePaths::page($directories[$fqcn]), $this->renderer->type($page, $locale));
+                }
+            }
+
+            $files->write('search.json', self::searchIndex($typePages, $latest));
+            // A root document also works when previewing without Cloudflare redirects.
             $files->write('index.html', $this->renderer->index(new IndexPage(
                 $latest === null ? null : (string) $latest->tag->version,
                 $oldest === null ? null : (string) $oldest->tag->version,
-                count($typePages),
-                $memberCount,
-                array_reverse(array_values($links)),
-            )));
-
-            $files->write('search.json', self::searchIndex($typePages, $latest));
-
-            foreach ($releases as $index => $release) {
-                $version = (string) $release->tag->version;
-                $previous = $releases[$index - 1] ?? null;
-                $next = $releases[$index + 1] ?? null;
-
-                $files->write(SitePaths::page(SitePaths::releaseDirectory($release->tag->version)), $this->renderer->release(new ReleasePage(
-                    $links[$version],
-                    $previous === null ? null : $links[(string) $previous->tag->version],
-                    $next === null ? null : $links[(string) $next->tag->version],
-                    // 解析の起点のリリースでは、その時点のメソッドがすべて「追加」になるので一覧を省く。
-                    $this->sections($changesByVersion[$version] ?? [], $directories, $typePages, omitAdded: $index === 0),
-                )));
-            }
-
-            foreach ($typePages as $fqcn => $page) {
-                $files->write(SitePaths::page($directories[$fqcn]), $this->renderer->type($page));
-            }
+                count($typePages), $memberCount, array_reverse(array_values($links)),
+            ), SiteLocale::English));
         });
 
         return new SiteBuildResult(count($releases), count($typePages), $memberCount, $skipped);

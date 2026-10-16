@@ -19,11 +19,20 @@
     return;
   }
 
+  var settings = input.closest('.search').dataset;
+  var locale = settings.locale;
+
+  function message(key, values) {
+    return settings[key].replace(/:(count|limit|version)/g, function (_, name) {
+      return String(values[name]);
+    });
+  }
+
   var entries = null;
   var total = 0;
 
   function typeUrl(fqcn) {
-    return '/types/' + fqcn.split('\\').join('/') + '/';
+    return settings.base + 'types/' + fqcn.split('\\').join('/') + '/';
   }
 
   function shortName(fqcn) {
@@ -122,9 +131,9 @@
     since.className = 'result-since';
 
     if (entry.flags & FLAG_REMOVED) {
-      since.appendChild(badge('削除済み', 'badge-danger'));
+      since.appendChild(badge(settings.searchRemoved, 'badge-danger'));
     } else if (entry.since !== null) {
-      since.textContent = 'v' + entry.since + (entry.flags & FLAG_SINCE_OR_EARLIER ? ' 以前から' : ' から');
+      since.textContent = message(entry.flags & FLAG_SINCE_OR_EARLIER ? 'sinceOrEarlier' : 'since', { version: entry.since });
     }
 
     if (entry.flags & FLAG_DEPRECATED) {
@@ -156,14 +165,14 @@
     results.replaceChildren();
 
     if (matches === null) {
-      status.textContent = total.toLocaleString() + ' 件の型・メソッドから検索できます。';
+      status.textContent = message('searchReady', { count: total.toLocaleString(locale) });
 
       return;
     }
 
     status.textContent = matches.length === 0
-      ? '見つかりませんでした。'
-      : matches.length.toLocaleString() + ' 件' + (matches.length > LIMIT ? '（上位 ' + LIMIT + ' 件を表示）' : '');
+      ? settings.searchNone
+      : message(matches.length === 1 ? 'searchCountOne' : 'searchCount', { count: matches.length.toLocaleString(locale) }) + (matches.length > LIMIT ? message('searchLimit', { limit: LIMIT.toLocaleString(locale) }) : '');
 
     var fragment = document.createDocumentFragment();
     matches.slice(0, LIMIT).forEach(function (match) {
@@ -220,6 +229,6 @@
       render();
     })
     .catch(function () {
-      status.textContent = '検索の一覧を読み込めませんでした。';
+      status.textContent = settings.searchError;
     });
 })();

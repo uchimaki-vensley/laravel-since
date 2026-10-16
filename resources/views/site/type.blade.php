@@ -3,8 +3,8 @@
     $shortName = $separator === false ? $page->fqcn : substr($page->fqcn, $separator + 1);
     $namespace = $separator === false ? null : substr($page->fqcn, 0, $separator);
 @endphp
-<x-site.layout :title="$shortName" :description="$page->fqcn.' の公開メソッドと、それぞれがいつから存在するか。'">
-    <nav class="breadcrumb" aria-label="パンくず"><a href="/">トップ</a> / 型</nav>
+<x-site.layout :public-url="$publicUrl" :locale="$locale" :directory="$directory" :title="$shortName" :description="__('site.type_description', ['type' => $page->fqcn])">
+    <nav class="breadcrumb" aria-label="{{ __('site.breadcrumb') }}"><a href="{{ $siteUrl('/') }}">{{ __('site.home') }}</a> / {{ __('site.types') }}</nav>
 
     <header class="type-header">
         <h1>{{ $shortName }}</h1>
@@ -26,12 +26,12 @@
             @endif
         </p>
         @if (! $page->existsInLatest())
-            <p class="notice">この型は最新のリリース（v{{ $page->latestVersion }}）にはありません。</p>
+            <p class="notice">{{ __('site.missing_type', ['version' => $page->latestVersion]) }}</p>
         @endif
     </header>
 
     @if ($page->members !== [])
-        <nav class="toc" aria-label="メソッドの一覧">
+        <nav class="toc" aria-label="{{ __('site.method_list') }}">
             @foreach ($page->members as $member)
                 <a href="#{{ $member->name }}" @class(['removed' => $member->signature === null])>{{ $member->name }}</a>
             @endforeach
@@ -39,7 +39,7 @@
     @endif
 
     @if ($page->members === [] && $page->internalMembers === [])
-        <p class="notice">公開メソッドはありません。</p>
+        <p class="notice">{{ __('site.no_methods') }}</p>
     @endif
 
     @foreach ($page->members as $member)
@@ -48,7 +48,7 @@
 
     @if ($page->internalMembers !== [])
         <details class="internal-members">
-            <summary><code>@@internal</code> のメソッド（{{ count($page->internalMembers) }}）</summary>
+            <summary>{{ __('site.internal_methods', ['count' => $siteNumber(count($page->internalMembers))]) }}</summary>
             @foreach ($page->internalMembers as $member)
                 @include('site.partials.member', ['member' => $member])
             @endforeach
