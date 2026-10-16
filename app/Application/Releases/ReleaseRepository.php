@@ -4,6 +4,7 @@ namespace App\Application\Releases;
 
 use App\Domain\Releases\PackageName;
 use App\Domain\Releases\ReleaseTag;
+use App\Domain\Releases\Version;
 
 interface ReleaseRepository
 {
@@ -22,4 +23,6 @@ interface ReleaseRepository
     public function unparsed(PackageName $package): array;
 
     public function find(int $id): ?ReleaseSummary;
+
+    public function findByVersion(PackageName $package, Version $version): ?ReleaseSummary;
 }

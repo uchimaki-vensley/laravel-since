@@ -6,8 +6,8 @@ use App\Application\Releases\ReleaseRepository;
 use App\Application\Releases\ReleaseSummary;
 use App\Domain\Releases\PackageName;
 use App\Domain\Releases\ReleaseTag;
+use App\Domain\Releases\Version;
 use App\Infrastructure\Persistence\Eloquent\Models\Release;
-use UnexpectedValueException;
 
 final class EloquentReleaseRepository implements ReleaseRepository
 {
@@ -35,7 +35,7 @@ final class EloquentReleaseRepository implements ReleaseRepository
             ->where('package', $package->value)
             ->whereNull('parsed_at')
             ->get()
-            ->map(self::toSummary(...))
+            ->map(ReleaseSummaryMapper::toSummary(...))
             ->all();
 
         usort($releases, static fn (ReleaseSummary $a, ReleaseSummary $b) => $a->tag->version->compare($b->tag->version));
@@ -47,17 +47,16 @@ final class EloquentReleaseRepository implements ReleaseRepository
     {
         $release = Release::query()->find($id);
 
-        return $release === null ? null : self::toSummary($release);
+        return $release === null ? null : ReleaseSummaryMapper::toSummary($release);
     }
 
-    private static function toSummary(Release $release): ReleaseSummary
+    public function findByVersion(PackageName $package, Version $version): ?ReleaseSummary
     {
-        $tag = ReleaseTag::tryParse($release->tag);
+        $release = Release::query()
+            ->where('package', $package->value)
+            ->where('version', (string) $version)
+            ->first();
 
-        if ($tag === null || (string) $tag->version !== $release->version) {
-            throw new UnexpectedValueException("Release {$release->id} has an invalid tag: {$release->tag}");
-        }
-
-        return new ReleaseSummary($release->id, new PackageName($release->package), $tag);
+        return $release === null ? null : ReleaseSummaryMapper::toSummary($release);
     }
 }

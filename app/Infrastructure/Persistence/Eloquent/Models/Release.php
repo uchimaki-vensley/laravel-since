@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['package', 'version', 'tag', 'released_at', 'parsed_at'])]
+#[Fillable(['package', 'version', 'tag', 'released_at', 'parsed_at', 'snapshot_revision', 'changes_basis'])]
 class Release extends Model
 {
     /** @use HasFactory<ReleaseFactory> */
@@ -39,6 +39,7 @@ class Release extends Model
         return [
             'released_at' => 'datetime',
             'parsed_at' => 'datetime',
+            'snapshot_revision' => 'integer',
         ];
     }
 }

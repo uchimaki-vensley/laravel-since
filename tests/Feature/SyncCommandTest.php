@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Infrastructure\Persistence\Eloquent\Models\Release;
 use App\Jobs\FetchReleaseSource;
 use App\Jobs\ParseReleaseSource;
+use App\Jobs\RecordReleaseChanges;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -56,21 +57,22 @@ class SyncCommandTest extends TestCase
         Http::assertSentCount(2);
     }
 
-    public function test_queues_one_batch_with_a_fetch_and_parse_chain_per_unparsed_release(): void
+    public function test_queues_one_batch_with_a_fetch_parse_and_record_chain_per_unparsed_release(): void
     {
         Release::factory()->create(['version' => '11.0.0', 'tag' => 'v11.0.0', 'parsed_at' => now()]);
         Http::fake([self::TAGS_URL => self::tags(['v11.0.1', 'v11.0.0', 'v11.1.0'])]);
 
         $this->sync()
             ->expectsOutputToContain('Registered 2 new release(s).')
-            ->expectsOutputToContain('Queued fetch and parse jobs for 2 release(s)')
+            ->expectsOutputToContain('Queued fetch, parse and change recording jobs for 2 release(s)')
             ->assertSuccessful();
 
         $expected = Release::query()->whereIn('version', ['11.0.1', '11.1.0'])->orderBy('version')->pluck('id')->all();
 
         Bus::assertBatched(function (PendingBatch $batch) use ($expected) {
-            $chains = $batch->jobs->map(fn (mixed $chain) => is_array($chain) && count($chain) === 2
+            $chains = $batch->jobs->map(fn (mixed $chain) => is_array($chain) && count($chain) === 3
                 && $chain[0] instanceof FetchReleaseSource && $chain[1] instanceof ParseReleaseSource
+                && $chain[2] instanceof RecordReleaseChanges
                 && $chain[0]->releaseId === $chain[1]->releaseId
                     ? $chain[0]->releaseId
                     : null)->all();
@@ -89,14 +91,15 @@ class SyncCommandTest extends TestCase
         $this->assertSame(2, Release::query()->count());
     }
 
-    public function test_does_not_queue_a_batch_when_every_release_is_parsed(): void
+    public function test_queues_only_change_recording_when_every_release_is_parsed(): void
     {
         Release::factory()->create(['version' => '11.0.0', 'tag' => 'v11.0.0', 'parsed_at' => now()]);
         Http::fake([self::TAGS_URL => self::tags(['v11.0.0'])]);
 
-        $this->sync()->expectsOutputToContain('No unparsed releases.')->assertSuccessful();
+        $this->sync()->expectsOutputToContain('No unparsed releases. Queued change recording.')->assertSuccessful();
 
         Bus::assertNothingBatched();
+        Bus::assertDispatched(RecordReleaseChanges::class);
     }
 
     public function test_sends_the_github_token_only_when_configured(): void
