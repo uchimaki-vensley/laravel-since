@@ -42,7 +42,8 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 
 ### Actions
 
-- 使ってよい Action: GitHub 製（`actions/*`）と、許可リストに明記したもの（`shivammathur/setup-php`、`cloudflare/wrangler-action`）だけ
+- 使ってよい Action: GitHub 製（`actions/*`）と、許可リストに明記したもの（`shivammathur/setup-php`、`cloudflare/wrangler-action`）だけ。
+  `cloudflare/wrangler-action` は許可リストにあるが使っていない（wrangler は `deploy/package-lock.json` で版とハッシュを固定して npm から入れる）
 - Action は **コミット SHA で固定** する（タグは書き換えられるため）。コメントにバージョンを書く。
   リポジトリ設定 `sha_pinning_required` により、SHA で固定していない Action を含むワークフローは GitHub 側で実行が拒否される
 - `GITHUB_TOKEN` の既定権限は **読み取りのみ**。必要なジョブだけ `permissions:` で広げる
@@ -54,6 +55,9 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 ### 環境（Environments）
 
 - `production`: デプロイ用。シークレットはここにだけ置く。デプロイ可能なブランチは `main` のみ
+- `deploy.yml` は、取得したソースの解析とサイトの生成（`build`）と、Cloudflare へのアップロード（`deploy`）を別のジョブにし、
+  `production` を使うのは `deploy` だけにする。信頼できない入力（tarball）や依存パッケージを扱うジョブからはシークレットが読めない。
+  `deploy` ジョブは `npm ci --ignore-scripts` で wrangler を入れ、インストールスクリプトを実行しない
 
 ### コードセキュリティ
 
