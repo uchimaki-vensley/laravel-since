@@ -48,7 +48,10 @@ class ParseReleaseSourceTest extends TestCase
         $this->assertSame(TypeKind::ClassType, $widget->kind);
         $this->assertSame('src/Illuminate/Fixture/Widget.php', $widget->file_path);
         $this->assertFalse($widget->is_internal);
-        $this->assertSame(12, $widget->methods()->count());
+        $this->assertSame(13, $widget->methods()->count());
+        // @method と同名の public メソッドは宣言側の 1 行だけ、protected と同名の @method は docblock 側を保存する。
+        $this->assertSame(MethodSource::Declared, $widget->methods()->where('name', 'render')->sole()->source);
+        $this->assertSame(MethodSource::Docblock, $widget->methods()->where('name', 'hidden')->sole()->source);
 
         $configure = $widget->methods()->where('name', 'configure')->firstOrFail();
         $this->assertSame(MethodSource::Declared, $configure->source);

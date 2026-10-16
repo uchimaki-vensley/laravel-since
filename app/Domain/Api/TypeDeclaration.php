@@ -15,7 +15,8 @@ final readonly class TypeDeclaration
 
     /**
      * PHP のメソッド名は大文字小文字を区別しないので、同じ名前は 1 つにまとめる。
-     * docblock の @method と同名の宣言メソッドがある場合は宣言メソッドを残す（扱いは Issue #11 で決める）。
+     * docblock の @method と同名の宣言メソッドがある場合は宣言メソッドを残す。PHP は宣言メソッドを直接呼び、
+     * __call には来ないので、@method は同じメソッドの説明にすぎない（Issue #11、docs/architecture.md）。
      *
      * @param  list<MethodDeclaration>  $methods
      */

@@ -189,9 +189,11 @@ class BuildCommandTest extends TestCase
 
     private function seedReleases(): void
     {
-        $previous = Release::factory()->create(['version' => '13.2.0', 'tag' => 'v13.2.0']);
-        $latest = Release::factory()->create(['version' => '13.3.0', 'tag' => 'v13.3.0']);
+        $previous = Release::factory()->create(['version' => '13.2.0', 'tag' => 'v13.2.0', 'changes_basis' => 'baseline:1']);
+        $latest = Release::factory()->create(['version' => '13.3.0', 'tag' => 'v13.3.0', 'changes_basis' => "{$previous->id}@1:1"]);
+        // 未解析のリリースと、解析済みでも変更履歴をまだ記録していないリリースは載せない。
         Release::factory()->create(['version' => '13.4.0', 'tag' => 'v13.4.0', 'parsed_at' => null]);
+        Release::factory()->create(['version' => '13.5.0', 'tag' => 'v13.5.0', 'changes_basis' => null]);
 
         Type::factory()->for($previous)->create(['fqcn' => 'Illuminate\Old\Gone']);
 

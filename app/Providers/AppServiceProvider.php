@@ -2,6 +2,11 @@
 
 namespace App\Providers;
 
+use App\Application\Changes\ReleaseChangeRecorder;
+use App\Application\Changes\ReleaseChangeRecorderService;
+use App\Application\Changes\ReleaseChangeRepository;
+use App\Application\Changes\ReleaseComparer;
+use App\Application\Changes\ReleaseComparerService;
 use App\Application\Releases\ApiSnapshotRepository;
 use App\Application\Releases\ReleaseRepository;
 use App\Application\Releases\ReleaseSourceFetcher;
@@ -26,6 +31,7 @@ use App\Infrastructure\GitHub\GitHubHttp;
 use App\Infrastructure\GitHub\GitHubReleaseTagSource;
 use App\Infrastructure\GitHub\GitHubSourceArchiveDownloader;
 use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentApiSnapshotRepository;
+use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentReleaseChangeRepository;
 use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentReleaseRepository;
 use App\Infrastructure\Persistence\Eloquent\Repositories\EloquentSiteCatalog;
 use App\Infrastructure\PhpSource\PhpSourceParser;
@@ -89,6 +95,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SourceParser::class, PhpSourceParser::class);
         $this->app->bind(ApiSnapshotRepository::class, EloquentApiSnapshotRepository::class);
         $this->app->bind(ReleaseSourceParser::class, ReleaseSourceParserService::class);
+
+        $this->app->bind(ReleaseChangeRepository::class, EloquentReleaseChangeRepository::class);
+
+        $this->app->bind(ReleaseChangeRecorder::class, fn (Application $app) => new ReleaseChangeRecorderService(
+            $app->make(ReleaseChangeRepository::class),
+            $app->make(ApiSnapshotRepository::class),
+            new PackageName(Config::string('since.package')),
+        ));
+
+        $this->app->bind(ReleaseComparer::class, fn (Application $app) => new ReleaseComparerService(
+            $app->make(ReleaseRepository::class),
+            $app->make(ApiSnapshotRepository::class),
+            new PackageName(Config::string('since.package')),
+        ));
 
         $this->app->bind(SiteCatalog::class, EloquentSiteCatalog::class);
         $this->app->bind(SiteRenderer::class, BladeSiteRenderer::class);

@@ -12,7 +12,7 @@ use App\Domain\Releases\PackageName;
 interface SiteCatalog
 {
     /**
-     * 解析済みのリリースを古いバージョンから順に返す。
+     * 解析し、変更履歴も記録したリリースを古いバージョンから順に返す。
      *
      * @return list<ReleaseSummary>
      */

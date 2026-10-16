@@ -9,7 +9,6 @@ use App\Domain\Api\MethodDeclaration;
 use App\Domain\Api\ParameterDeclaration;
 use App\Domain\Api\TypeDeclaration;
 use App\Domain\Releases\PackageName;
-use App\Domain\Releases\ReleaseTag;
 use App\Domain\Releases\Version;
 use App\Infrastructure\Persistence\Eloquent\Models\Method;
 use App\Infrastructure\Persistence\Eloquent\Models\Parameter;
@@ -30,16 +29,9 @@ final class EloquentSiteCatalog implements SiteCatalog
         $releases = Release::query()
             ->where('package', $package->value)
             ->whereNotNull('parsed_at')
+            ->whereNotNull('changes_basis')
             ->get()
-            ->map(static function (Release $release) use ($package): ReleaseSummary {
-                $tag = ReleaseTag::tryParse($release->tag);
-
-                if ($tag === null || (string) $tag->version !== $release->version) {
-                    throw new UnexpectedValueException("Release {$release->id} has an invalid tag: {$release->tag}");
-                }
-
-                return new ReleaseSummary($release->id, $package, $tag);
-            })
+            ->map(ReleaseSummaryMapper::toSummary(...))
             ->all();
 
         usort($releases, static fn (ReleaseSummary $a, ReleaseSummary $b) => $a->tag->version->compare($b->tag->version));

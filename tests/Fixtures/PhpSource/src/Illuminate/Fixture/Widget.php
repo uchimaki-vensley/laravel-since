@@ -13,6 +13,7 @@ use Illuminate\Fixture\Contracts\Renderable;
  * @method string render()
  * @method void forward(int &$count, $untyped = self::DEFAULT)
  * @method void FORWARD()
+ * @method int hidden()
  */
 class Widget implements Renderable
 {
