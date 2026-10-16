@@ -35,6 +35,8 @@ return [
     ],
 
     'site' => [
+        // canonical / hreflang の公開 URL。独自ドメインでは SINCE_SITE_URL を設定する。
+        'url' => env('SINCE_SITE_URL', 'https://laravel-since.pages.dev'),
         // since:build の出力先。中身は毎回丸ごと置き換える。
         'path' => env('SINCE_SITE_PATH', base_path('dist')),
         // そのまま出力に含める静的ファイル（CSS・JS・_headers）

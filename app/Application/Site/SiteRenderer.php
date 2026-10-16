@@ -11,9 +11,9 @@ use App\Application\Site\Pages\TypePage;
  */
 interface SiteRenderer
 {
-    public function index(IndexPage $page): string;
+    public function index(IndexPage $page, SiteLocale $locale): string;
 
-    public function release(ReleasePage $page): string;
+    public function release(ReleasePage $page, SiteLocale $locale): string;
 
-    public function type(TypePage $page): string;
+    public function type(TypePage $page, SiteLocale $locale): string;
 }

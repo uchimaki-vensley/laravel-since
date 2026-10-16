@@ -15,7 +15,7 @@
  (tarball)      │    │      RecordReleaseChanges 直前のリリースと比較 → 変更履歴                                │
                 │    └─ 完了イベント ─▶ 通知（自分宛て。任意）                                                  │
                 │                                                                                             │
-                │  php artisan since:build   Blade で静的な HTML / JSON を dist/ に書き出す                     │
+                │  php artisan since:build   Blade で多言語の静的 HTML / 共通 JSON を dist/ に書き出す                     │
                 │                                                                                             │
                 │  wrangler pages deploy dist/   ─────────────────────────────────────────────▶ Cloudflare Pages │
                 └─────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -248,13 +248,15 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 
 ```
 dist/
-  index.html                       検索ページ（search.json をブラウザで絞り込む）とリリース一覧
+  index.html                       静的プレビュー用の英語トップ（本番は /en/ に 301）
+  {locale}/index.html              検索ページ（search.json をブラウザで絞り込む）とリリース一覧
   search.json                      型とメソッドの軽量な一覧
-  releases/{version}/index.html    そのリリースで追加・削除・変更・非推奨になったもの
-  types/{名前空間を / で区切った型名}/index.html
+  {locale}/releases/{version}/index.html    そのリリースで追加・削除・変更・非推奨になったもの
+  {locale}/types/{名前空間を / で区切った型名}/index.html
                                    型ごとのメソッド一覧と、各メソッドの「いつから」と変更履歴
-                                   （例: types/Illuminate/Database/Eloquent/Builder/）
-  assets/                          site.css・search.js・favicon.svg（resources/site からそのまま写す）
+                                   （例: en/types/Illuminate/Database/Eloquent/Builder/）
+  assets/                          site.css・search.js・language.js・favicon.svg（resources/site からそのまま写す）
+  _redirects                       旧 URL とトップの 301 転送（Cloudflare Pages）
   _headers                         セキュリティヘッダー（CSP など。security.md 参照）
   .since-site                      since:build が書いた出力であることの印
 ```
@@ -274,7 +276,7 @@ dist/
 - 出力は `since.site.path`（環境変数 `SINCE_SITE_PATH`、既定 `dist/`）。同じ親ディレクトリの一時ディレクトリに書き終えてから rename で置き換える。
   誤った設定で無関係なディレクトリを消さないよう、既存の出力先は空か `.since-site` がある場合だけ置き換える。
 - サイトにユーザー入力を受け取るフォームやサーバー処理はない。検索はブラウザ内で完結する。
-- 実測（13.35.0 / 13.36.0 の 2 リリース）: 1,646 型・13,068 メソッドで 1,655 ファイル・約 26MB、メモリのピーク約 75MB。
+- 多言語化前の実測（13.35.0 / 13.36.0 の 2 リリース）: 1,646 型・13,068 メソッドで 1,655 ファイル・約 26MB、メモリのピーク約 75MB。
   スナップショットと変更履歴は 200 件（変更履歴は 2,000 件）ずつ読み、Eloquent のモデルをまとめて持たない。
 
 ## 定期実行の所要時間と、毎回作り直す方式（決定）
@@ -290,7 +292,7 @@ dist/
 | `since:build` | 6 秒、最大メモリ約 110MB |
 | SQLite | 約 1.0GB（types 38 万、methods 312 万、parameters 393 万、symbols 1.3 万、symbol_changes 1.9 万） |
 | 展開したソース | 約 3.3GB |
-| `dist/` | 1,937 ファイル、約 41MB（`search.json` 約 504KB、gzip 後約 82KB） |
+| `dist/`（多言語化前の実測） | 1,937 ファイル、約 41MB（`search.json` 約 504KB、gzip 後約 82KB） |
 
 - 解析は 1 リリース 1〜2 秒、取得はレート制限（毎分 30 件）が律速になる。記録ジョブは各チェーンの末尾で動くが、
   記録済みなら数ミリ秒で終わり、新しく記録するときも 13〜17 秒。
@@ -303,3 +305,26 @@ dist/
 
 - Larastan のスタブとの突き合わせ（どのスタブのどのメソッドが `model-property` を持つか）の取得方法。
 - 対象パッケージを `laravel/framework` 以外（Livewire など）に広げるか。
+
+## 静的サイトの多言語化
+
+`since:build` は `SiteLocale`（Application の backed enum）に定義した英語 `en`、日本語 `ja`、
+ハンガリー語 `hu` の HTML をそれぞれ `dist/{locale}/` に生成する。
+API の解析・DB・ページの内容は共通で、`search.json` と `assets/` も一度だけ出力する。
+`SiteRenderer` の各メソッドは明示的に `SiteLocale` を受け取り、`BladeSiteRenderer` が翻訳 locale を
+レンダリング中だけ変更する（例外時も元に戻す）。Domain / Application は Laravel の翻訳機能に依存しない。
+DTO の URL は言語に依存しないサイト内パスで、Blade で locale のプレフィックスを付ける。
+
+翻訳は `lang/{en,ja,hu}/site.php`。文章全体をキーに対応させ、バージョン・件数はプレースホルダーで渡す。
+英語を fallback とし、翻訳キーとプレースホルダーの一致をテストする。
+検索 JS は HTML のエスケープ済み `data-*` 属性から翻訳と locale を読み、`textContent` で結果を作る。
+検索結果の URL に現在の locale を付け、数値の表示も locale に合わせる。
+
+各ページには現在ページに対応する言語リンク、`html lang`、canonical、相互の hreflang と
+英語の `x-default` を出す。`assets/language.js` は言語切替時に検索クエリとフラグメントを引き継ぐ。
+メタデータの公開 origin は `since.site.url`（`SINCE_SITE_URL`、既定 `https://laravel-since.pages.dev`）。
+独自ドメインへの変更時はビルド環境で設定する。
+
+`resources/site/_redirects` により Cloudflare Pages 上で `/` は `/en/`、既存の `/types/*` と
+`/releases/*` は日本語の `/ja/…` に 301 リダイレクトする。静的プレビュー用に `dist/index.html` にも
+英語のトップを出す（canonical は `/en/`）。出力件数は翻訳数を掛けず、元のリリース・型・メソッド数を返す。

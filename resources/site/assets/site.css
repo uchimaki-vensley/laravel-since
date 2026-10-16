@@ -70,7 +70,7 @@ h3 { font-size: 1rem; margin: 1.4em 0 0.4em; }
 
 /* ヘッダー・フッター */
 .site-header { border-bottom: 1px solid var(--border); background: var(--surface); }
-.site-header .container { display: flex; align-items: baseline; gap: 16px; padding-top: 14px; padding-bottom: 14px; }
+.site-header .container { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding-top: 14px; padding-bottom: 14px; }
 .brand { font-weight: 700; font-size: 1.15rem; color: var(--text); letter-spacing: -0.01em; }
 .brand span { color: var(--accent); }
 .brand:hover { text-decoration: none; }
@@ -229,3 +229,6 @@ pre.docblock { color: var(--muted); }
   .stats { flex-direction: column; }
   .tagline { display: none; }
 }
+
+.languages { display: flex; gap: 12px; flex-wrap: wrap; margin-left: auto; font-size: 0.9rem; }
+.languages [aria-current="page"] { color: var(--text); font-weight: 700; }

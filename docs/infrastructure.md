@@ -77,3 +77,10 @@ VPS・常時動くサーバー・外部 DB は持たない（理由は context.m
 - 起動時に `docker/dev-start.sh` が `composer install` → `.env` 作成 → `key:generate` → `migrate` → `php artisan serve` を行う。
 - ポートは `127.0.0.1` にだけ公開する（同じネットワークの他の端末からは見えない）。
 - 割当ポートは `node scripts/devenv.mjs info` で確認する。
+
+## 多言語サイトの配信
+
+ビルド成果物に `/en/`、`/ja/`、`/hu/` をすべて含め、共通の `assets/` と `search.json` を配信する。
+`resources/site/_redirects` も出力され、Cloudflare Pages が旧 URL を日本語ページへ、`/` を英語へ 301 転送する。
+`SINCE_SITE_URL` の既定は `https://laravel-since.pages.dev`。独自ドメインを使う場合は build の環境変数に
+公開 URL を指定する（canonical / hreflang 用。シークレットではない）。
