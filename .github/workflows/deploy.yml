@@ -1,0 +1,118 @@
+name: Deploy
+
+on:
+  schedule:
+    # 毎日 1 回（03:17 UTC）。毎時 0 分は混み合うのでずらす。
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+# 既定は読み取りのみ。シークレットは deploy ジョブが environment `production` からだけ読む（docs/security.md）。
+permissions:
+  contents: read
+
+# 前の実行が終わるまで次を始めない（途中のデプロイを取り消さない）。
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build
+    # 手動実行でほかのブランチを選んでも動かさない。
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # 解析対象のソースや依存パッケージを扱うジョブには、シークレットを渡さない。
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+
+      - name: Fetch, parse and record changes
+        env:
+          APP_ENV: production
+          APP_DEBUG: 'false'
+          LOG_LEVEL: warning
+          # GitHub API（タグの一覧）にだけ送る。読み取り専用の Actions のトークン。
+          GITHUB_TOKEN: ${{ github.token }}
+          # 記録ジョブ（timeout 1800 秒）より長くして、実行中のジョブが別の試行として取り直されないようにする。
+          DB_QUEUE_RETRY_AFTER: '1900'
+        run: scripts/generate-data.sh
+
+      - name: Build the site
+        env:
+          APP_ENV: production
+          APP_DEBUG: 'false'
+        run: php artisan since:build --no-interaction
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: site
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    name: deploy
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+    steps:
+      - name: Check secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=0
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "::error::Secret CLOUDFLARE_API_TOKEN is not set in the production environment (see docs/infrastructure.md)."
+            missing=1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is not set in the production environment (see docs/infrastructure.md)."
+            missing=1
+          fi
+          exit "${missing}"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Install wrangler
+        working-directory: deploy
+        # package-lock.json の版とハッシュどおりに入れる。インストールスクリプトは実行しない。
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: site
+          path: site
+
+      - name: Deploy to Cloudflare Pages
+        working-directory: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --no-install wrangler pages deploy ../site --project-name=laravel-since --branch=main --commit-hash="${GITHUB_SHA}" --commit-dirty=true

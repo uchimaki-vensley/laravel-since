@@ -1,0 +1,10 @@
+{
+    "private": true,
+    "description": "deploy.yml が Cloudflare Pages への Direct Upload に使う wrangler（依存は package-lock.json で固定）",
+    "engines": {
+        "node": ">=22"
+    },
+    "devDependencies": {
+        "wrangler": "4.147.0"
+    }
+}
