@@ -1,4 +1,4 @@
-<x-site.layout :public-url="$publicUrl" :locale="$locale" :directory="$directory" :title="__('site.search')">
+<x-site.layout :public-url="$publicUrl" :locale="$locale" :path="$path" :title="__('site.search')">
     <x-slot:head>
         <script src="/assets/search.js" defer></script>
     </x-slot:head>
@@ -23,7 +23,9 @@
         data-search-removed="{{ __('site.search_removed') }}"
         data-since="{{ __('site.since') }}"
         data-since-or-earlier="{{ __('site.since_or_earlier') }}"
-        data-locale="{{ $locale->value }}" data-base="{{ $siteUrl('/') }}"
+        data-base="{{ $siteUrl() }}"
+        data-group-separator="{{ $locale->groupSeparator() }}"
+        data-minimum-grouping-digits="{{ $locale->minimumGroupingDigits() }}"
         class="search" aria-label="{{ __('site.search') }}">
         <label class="search-label" for="q">{{ __('site.search_label') }}</label>
         <input id="q" class="search-input" type="search" placeholder="{{ __('site.placeholder') }}" autocomplete="off" spellcheck="false" autofocus>
@@ -61,7 +63,7 @@
                         @foreach ($page->releases as $release)
                             <tr>
                                 <th scope="row">
-                                    <a href="{{ $siteUrl($release->url) }}">v{{ $release->version }}</a>
+                                    <a href="{{ $siteUrl($release->path) }}">v{{ $release->version }}</a>
                                     @if ($loop->last)
                                         <span class="muted" title="{{ __('site.baseline_title') }}">{{ __('site.baseline') }}</span>
                                     @endif

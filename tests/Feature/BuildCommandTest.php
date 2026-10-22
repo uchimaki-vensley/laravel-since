@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Application\Site\Pages\IndexPage;
 use App\Application\Site\SiteLocale;
+use App\Application\Site\SitePath;
 use App\Domain\Enums\MethodSource;
 use App\Domain\Enums\SymbolChangeKind;
 use App\Infrastructure\Persistence\Eloquent\Models\Method;
@@ -16,12 +17,14 @@ use App\Infrastructure\Site\BladeSiteRenderer;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Testing\PendingCommand;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 use SplFileInfo;
 use Tests\TestCase;
+use Throwable;
 
 class BuildCommandTest extends TestCase
 {
@@ -137,11 +140,31 @@ class BuildCommandTest extends TestCase
 
         foreach (array_filter($this->files(), static fn (string $file) => str_ends_with($file, '.html')) as $file) {
             $html = $this->page($file);
-            $this->assertDoesNotMatchRegularExpression('/<script(?![^>]*\ssrc="\/)[^>]*>/', $html, $file);
-            $this->assertDoesNotMatchRegularExpression('/<(?:script|img)[^>]+src="(?!\/)/', $html, $file);
-            $this->assertDoesNotMatchRegularExpression('/<link(?=[^>]*rel="(?:stylesheet|icon)")[^>]*href="(?!\/)/', $html, $file);
+            $this->assertDoesNotMatchRegularExpression('/<script(?![^>]*\ssrc="\/(?!\/))[^>]*>/', $html, $file);
+            $this->assertDoesNotMatchRegularExpression('/<(?:script|img)[^>]+src="(?!\/(?!\/))/', $html, $file);
+            $this->assertSiteLinks($html, $file);
             $this->assertDoesNotMatchRegularExpression('/\son[a-z]+=/', $html, $file);
             $this->assertStringNotContainsString(' style=', $html, $file);
+        }
+    }
+
+    /**
+     * `<link>` は同じサイトのものだけ。公開 URL（since.site.url）の絶対 URL は canonical と alternate だけに許す。
+     */
+    private function assertSiteLinks(string $html, string $file): void
+    {
+        $publicUrl = rtrim(config()->string('since.site.url'), '/').'/';
+        preg_match_all('/<link\b[^>]*>/', $html, $links);
+
+        foreach ($links[0] as $link) {
+            $rel = preg_match('/\srel="([^"]*)"/', $link, $match) === 1 ? $match[1] : '';
+            $href = preg_match('/\shref="([^"]*)"/', $link, $match) === 1 ? $match[1] : '';
+
+            if (in_array($rel, ['canonical', 'alternate'], true)) {
+                $this->assertStringStartsWith($publicUrl, $href, $file.': '.$link);
+            } else {
+                $this->assertMatchesRegularExpression('~\A/(?!/)~', $href, $file.': '.$link);
+            }
         }
     }
 
@@ -227,7 +250,7 @@ class BuildCommandTest extends TestCase
                 $this->assertStringContainsString('rel="canonical" href="https://example.test/'.$locale.'/'.$path.'"', $html);
                 foreach (['en', 'ja', 'hu'] as $alternate) {
                     $this->assertStringContainsString('hreflang="'.$alternate.'" href="https://example.test/'.$alternate.'/'.$path.'"', $html);
-                    $this->assertStringContainsString('data-language href="/'.$alternate.'/'.$path.'"', $html);
+                    $this->assertStringContainsString('data-language="/'.$alternate.'/'.$path.'" href="/'.$alternate.'/'.$path.'"', $html);
                 }
                 $this->assertStringContainsString('hreflang="x-default" href="https://example.test/en/'.$path.'"', $html);
                 // Every site link stays in the selected language except explicit language switches.
@@ -241,10 +264,10 @@ class BuildCommandTest extends TestCase
         $this->assertStringContainsString('Szignatúra módosítva', $hungarian);
         $this->assertStringContainsString('Since v13.2.0 or earlier', $this->page('en/types/Illuminate/Database/Eloquent/Builder/index.html'));
         $this->assertStringContainsString('<html lang="en">', $this->page('index.html'));
-        $this->assertSame("/ /en/ 301\n/types/* /ja/types/:splat 301\n/releases/* /ja/releases/:splat 301\n", $this->page('_redirects'));
+        $this->assertSame("/ /en/ 302\n/types/* /ja/types/:splat 301\n/releases/* /ja/releases/:splat 301\n", $this->page('_redirects'));
     }
 
-    public function test_translations_have_matching_keys_and_placeholders_and_english_fallback(): void
+    public function test_translations_have_matching_keys_and_placeholders(): void
     {
         $translator = app('translator');
         $english = $translator->get('site', [], 'en');
@@ -263,8 +286,32 @@ class BuildCommandTest extends TestCase
             }
         }
 
-        $translator->setFallback('en');
-        $this->assertSame('Search', $translator->get('site.search', [], 'fr'));
+    }
+
+    public function test_numbers_on_pages_and_in_search_follow_the_same_locale_rules(): void
+    {
+        $this->seedReleases();
+        $this->build()->assertSuccessful();
+
+        $english = $this->page('en/index.html');
+        $this->assertStringContainsString('data-group-separator=","', $english);
+        $this->assertStringContainsString('data-minimum-grouping-digits="1"', $english);
+
+        $hungarian = $this->page('hu/index.html');
+        $this->assertStringContainsString("data-group-separator=\"\u{00a0}\"", $hungarian);
+        $this->assertStringContainsString('data-minimum-grouping-digits="2"', $hungarian);
+    }
+
+    public function test_a_site_path_cannot_be_printed_without_a_locale(): void
+    {
+        try {
+            Blade::render('<a href="{{ $path }}">', ['path' => SitePath::home()]);
+            $this->fail('Printing a SitePath should fail.');
+        } catch (Throwable $exception) {
+            $this->assertStringContainsString(SitePath::class, $exception->getMessage());
+        }
+
+        $this->assertSame('<a href="/hu/">', Blade::render('<a href="{{ $path->url($locale) }}">', ['path' => SitePath::home(), 'locale' => SiteLocale::Hungarian]));
     }
 
     public function test_restores_the_translation_locale_if_rendering_fails(): void

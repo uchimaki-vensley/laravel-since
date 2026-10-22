@@ -15,7 +15,7 @@
  (tarball)      │    │      RecordReleaseChanges 直前のリリースと比較 → 変更履歴                                │
                 │    └─ 完了イベント ─▶ 通知（自分宛て。任意）                                                  │
                 │                                                                                             │
-                │  php artisan since:build   Blade で多言語の静的 HTML / 共通 JSON を dist/ に書き出す                     │
+                │  php artisan since:build   Blade で言語ごとの静的 HTML と共通の JSON を dist/ に書き出す    │
                 │                                                                                             │
                 │  wrangler pages deploy dist/   ─────────────────────────────────────────────▶ Cloudflare Pages │
                 └─────────────────────────────────────────────────────────────────────────────────────────────┘
@@ -86,7 +86,7 @@ Issue #7（静的サイトの出力）の配置:
 
 | 層 | クラス | 役割 |
 | --- | --- | --- |
-| Application | `App\Application\Site\SiteBuilder`（実装は `SiteBuilderService`）、`SitePaths`、`SignatureFormatter`、`Pages\*` | サイトを作るユースケース。URL とファイルの置き場所、シグネチャの表示、ページの内容 |
+| Application | `App\Application\Site\SiteBuilder`（実装は `SiteBuilderService`）、`SitePath`、`SiteLocale`、`SignatureFormatter`、`Pages\*` | サイトを作るユースケース。言語付きの URL とファイルの置き場所、件数の表示形式、シグネチャの表示、ページの内容 |
 | Application（ポート） | `SiteCatalog` / `SiteRenderer` / `SiteOutput` / `SiteFiles` | DB の読み出し・HTML への変換・出力先の置き換え・ファイルの書き込み |
 | Infrastructure | `Persistence\Eloquent\Repositories\EloquentSiteCatalog`、`Site\BladeSiteRenderer`、`Site\LocalSiteOutput` / `LocalSiteFiles` | Eloquent、Blade（`resources/views/site`）、ローカルのファイル |
 | Presentation | `App\Console\Commands\BuildCommand`（`since:build`） | 入口 |
@@ -248,7 +248,7 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 
 ```
 dist/
-  index.html                       静的プレビュー用の英語トップ（本番は /en/ に 301）
+  index.html                       静的プレビュー用の英語トップ（本番は `_redirects` で /en/ に 302 転送）
   {locale}/index.html              検索ページ（search.json をブラウザで絞り込む）とリリース一覧
   search.json                      型とメソッドの軽量な一覧
   {locale}/releases/{version}/index.html    そのリリースで追加・削除・変更・非推奨になったもの
@@ -256,7 +256,7 @@ dist/
                                    型ごとのメソッド一覧と、各メソッドの「いつから」と変更履歴
                                    （例: en/types/Illuminate/Database/Eloquent/Builder/）
   assets/                          site.css・search.js・language.js・favicon.svg（resources/site からそのまま写す）
-  _redirects                       旧 URL とトップの 301 転送（Cloudflare Pages）
+  _redirects                       トップ（302）と多言語化前の URL（301）の転送（Cloudflare Pages）
   _headers                         セキュリティヘッダー（CSP など。security.md 参照）
   .since-site                      since:build が書いた出力であることの印
 ```
@@ -278,6 +278,48 @@ dist/
 - サイトにユーザー入力を受け取るフォームやサーバー処理はない。検索はブラウザ内で完結する。
 - 多言語化前の実測（13.35.0 / 13.36.0 の 2 リリース）: 1,646 型・13,068 メソッドで 1,655 ファイル・約 26MB、メモリのピーク約 75MB。
   スナップショットと変更履歴は 200 件（変更履歴は 2,000 件）ずつ読み、Eloquent のモデルをまとめて持たない。
+  ページの内容は言語によらず 1 回だけ作るので、言語を増やしても増えるのは描画と書き出しだけで、メモリはほぼ変わらない。
+
+## 静的サイトの多言語化
+
+`since:build` は `SiteLocale`（Application の backed enum）に定義した英語 `en`、日本語 `ja`、
+ハンガリー語 `hu` の HTML をそれぞれ `dist/{locale}/` に生成する。`search.json` と `assets/` は共通で一度だけ出力する。
+
+- ページの内容（`IndexPage` / `ReleasePage` / `TypePage`）は言語によらないので、`SiteBuilderService` が 1 回だけ作り、
+  言語ごとに `SiteRenderer` で描画して書き出す。並べ替えや集計を言語の数だけ繰り返さない。
+- ページの場所とリンク先は値オブジェクト `SitePath`（Application）で持つ。URL は `SitePath::url(SiteLocale)`、
+  出力ファイルは `SitePath::file(SiteLocale)` でだけ作り、どちらも言語の接頭辞を必ず含む。
+  - `SitePath` は文字列に変換できないので、Blade で `{{ $item->path }}` のように言語なしで出力するとビルドが例外で止まる
+    （接頭辞の付け忘れが、誤ったリンクのまま公開されない）。Blade ではレンダラーが渡す `$siteUrl($path)` を使う。
+  - 各ページは自分の `SitePath` を持ち（`TypePage::$path`、`ReleasePage::$release->path`、トップは `SitePath::home()`）、
+    書き出し先と canonical・hreflang・言語リンクは同じ値から作る。
+  - 型名をパスにする検証（PHP の識別子だけ）は `SitePath::type()` が行い、パスにできない型は `null` になってページを作らない。
+- `SiteRenderer` の各メソッドは `SiteLocale` を受け取り、`BladeSiteRenderer` が翻訳の locale を描画中だけ変える
+  （例外時も元に戻す）。Domain / Application は Laravel の翻訳機能に依存しない。
+
+翻訳は `lang/{en,ja,hu}/site.php`。文章全体をキーに対応させ、バージョン・件数はプレースホルダーで渡す。
+全言語で同じキーとプレースホルダーを持つことをテストし、fallback には頼らない。
+
+- 件数の表示は `SiteLocale::formatNumber()` に従う。区切り文字と区切り始める桁数は CLDR に合わせる
+  （en / ja は 4 桁から `,`、hu は 5 桁から改行しない空白。例: `1646`、`12 345`）。
+- 検索 JS は、翻訳・区切りの規則・言語付きのサイトの基準パスを HTML のエスケープ済み `data-*` 属性から読み、
+  ページと同じ規則で件数を表示し、`textContent` で結果を作る。
+
+各ページには、現在のページに対応する言語リンク、`html lang`、canonical、相互の hreflang と英語の `x-default` を出す。
+`assets/language.js` は言語リンクの `href` を、常に現在の検索語（`?q=`）とフラグメント付きに保つ
+（読み込み時、`hashchange`・`popstate`、検索 JS が URL を書き換えたときの `since:urlchange`）。
+クリックだけでなく、中クリック・新しいタブで開く・リンクのコピーでも引き継がれる。
+メタデータの公開 origin は `since.site.url`（`SINCE_SITE_URL`、既定 `https://laravel-since.pages.dev`）。
+独自ドメインに変えるときはビルドの環境で設定する。
+
+`resources/site/_redirects` は Cloudflare Pages の転送規則。
+
+- `/` は `/en/` に 302 で転送する。既定の言語を後で変えられるよう、ブラウザに長くキャッシュされる 301 にはしない。
+- 多言語化前の `/types/*` と `/releases/*` は、日本語の `/ja/…` に 301 で転送する（中身が日本語だったため）。
+- `_redirects` がない静的プレビュー用に、`dist/index.html` にも英語のトップを出す（canonical は `/en/`）。
+- `since:build` が表示する件数は言語の数を掛けず、元のリリース・型・メソッドの数を返す。
+- Cloudflare Pages の Free プランは 1 デプロイ 20,000 ファイルまで。HTML は「(型の数 + リリースの数 + 1) × 言語の数」になるので、
+  言語や対象パッケージを増やすときはこの上限を確認する。
 
 ## 定期実行の所要時間と、毎回作り直す方式（決定）
 
@@ -293,6 +335,7 @@ dist/
 | SQLite | 約 1.0GB（types 38 万、methods 312 万、parameters 393 万、symbols 1.3 万、symbol_changes 1.9 万） |
 | 展開したソース | 約 3.3GB |
 | `dist/`（多言語化前の実測） | 1,937 ファイル、約 41MB（`search.json` 約 504KB、gzip 後約 82KB） |
+| `dist/`（3 言語の見込み。未計測） | HTML が約 3 倍になり、約 5,800 ファイル・約 120MB。`since:build` は 20 秒前後 |
 
 - 解析は 1 リリース 1〜2 秒、取得はレート制限（毎分 30 件）が律速になる。記録ジョブは各チェーンの末尾で動くが、
   記録済みなら数ミリ秒で終わり、新しく記録するときも 13〜17 秒。
@@ -305,26 +348,3 @@ dist/
 
 - Larastan のスタブとの突き合わせ（どのスタブのどのメソッドが `model-property` を持つか）の取得方法。
 - 対象パッケージを `laravel/framework` 以外（Livewire など）に広げるか。
-
-## 静的サイトの多言語化
-
-`since:build` は `SiteLocale`（Application の backed enum）に定義した英語 `en`、日本語 `ja`、
-ハンガリー語 `hu` の HTML をそれぞれ `dist/{locale}/` に生成する。
-API の解析・DB・ページの内容は共通で、`search.json` と `assets/` も一度だけ出力する。
-`SiteRenderer` の各メソッドは明示的に `SiteLocale` を受け取り、`BladeSiteRenderer` が翻訳 locale を
-レンダリング中だけ変更する（例外時も元に戻す）。Domain / Application は Laravel の翻訳機能に依存しない。
-DTO の URL は言語に依存しないサイト内パスで、Blade で locale のプレフィックスを付ける。
-
-翻訳は `lang/{en,ja,hu}/site.php`。文章全体をキーに対応させ、バージョン・件数はプレースホルダーで渡す。
-英語を fallback とし、翻訳キーとプレースホルダーの一致をテストする。
-検索 JS は HTML のエスケープ済み `data-*` 属性から翻訳と locale を読み、`textContent` で結果を作る。
-検索結果の URL に現在の locale を付け、数値の表示も locale に合わせる。
-
-各ページには現在ページに対応する言語リンク、`html lang`、canonical、相互の hreflang と
-英語の `x-default` を出す。`assets/language.js` は言語切替時に検索クエリとフラグメントを引き継ぐ。
-メタデータの公開 origin は `since.site.url`（`SINCE_SITE_URL`、既定 `https://laravel-since.pages.dev`）。
-独自ドメインへの変更時はビルド環境で設定する。
-
-`resources/site/_redirects` により Cloudflare Pages 上で `/` は `/en/`、既存の `/types/*` と
-`/releases/*` は日本語の `/ja/…` に 301 リダイレクトする。静的プレビュー用に `dist/index.html` にも
-英語のトップを出す（canonical は `/en/`）。出力件数は翻訳数を掛けず、元のリリース・型・メソッド数を返す。

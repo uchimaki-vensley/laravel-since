@@ -20,7 +20,15 @@
   }
 
   var settings = input.closest('.search').dataset;
-  var locale = settings.locale;
+  var minimumGroupingDigits = Number(settings.minimumGroupingDigits);
+
+  // ページの件数（SiteLocale::formatNumber）と同じ規則で区切る。
+  function formatNumber(number) {
+    var digits = String(number);
+    if (digits.length < 3 + minimumGroupingDigits) return digits;
+
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, settings.groupSeparator);
+  }
 
   function message(key, values) {
     return settings[key].replace(/:(count|limit|version)/g, function (_, name) {
@@ -165,14 +173,14 @@
     results.replaceChildren();
 
     if (matches === null) {
-      status.textContent = message('searchReady', { count: total.toLocaleString(locale) });
+      status.textContent = message('searchReady', { count: formatNumber(total) });
 
       return;
     }
 
     status.textContent = matches.length === 0
       ? settings.searchNone
-      : message(matches.length === 1 ? 'searchCountOne' : 'searchCount', { count: matches.length.toLocaleString(locale) }) + (matches.length > LIMIT ? message('searchLimit', { limit: LIMIT.toLocaleString(locale) }) : '');
+      : message(matches.length === 1 ? 'searchCountOne' : 'searchCount', { count: formatNumber(matches.length) }) + (matches.length > LIMIT ? message('searchLimit', { limit: formatNumber(LIMIT) }) : '');
 
     var fragment = document.createDocumentFragment();
     matches.slice(0, LIMIT).forEach(function (match) {
@@ -192,6 +200,8 @@
     }
 
     window.history.replaceState(null, '', url);
+    // 言語の切り替えリンク（language.js）に、新しい検索語を反映させる。
+    document.dispatchEvent(new Event('since:urlchange'));
   }
 
   var timer = null;

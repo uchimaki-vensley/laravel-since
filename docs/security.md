@@ -84,7 +84,7 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 - 検索（`assets/search.js`）は結果を `textContent` で組み立て、`innerHTML` を使わない
 - 型名から作るページのパスは、PHP の識別子（ASCII）を `\` でつないだ名前に限る。それ以外の名前はページにせず警告を出す。
   書き込みは出力ディレクトリの中の相対パス（`.` で始まるセグメント・空のセグメント・バックスラッシュを含まないもの）に限り、既存のファイルを上書きしない
-  （実装は `App\Application\Site\SitePaths`、`App\Infrastructure\Site\LocalSiteFiles`）
+  （実装は `App\Application\Site\SitePath`、`App\Infrastructure\Site\LocalSiteFiles`）
 
 ## 取得したソースの扱い
 
@@ -114,3 +114,5 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 言語のパス接頭辞は `SiteLocale` enum の固定値 `en` / `ja` / `hu` のみ。
 翻訳と検索用メッセージは Blade の `{{ }}` でエスケープし、JS には `data-*` 属性で渡す。
 言語切替も同梱した外部 JS で行い、CSP のインラインスクリプト禁止を維持する。
+`<link>` は同じサイトの相対パスだけにし、絶対 URL は canonical と hreflang（`since.site.url` で始まるもの）に限る。
+`<script>` / `<img>` の `src` も同じサイトのパスだけにする（`//` で始まる他サイトの URL も不可）。どちらも `BuildCommandTest` で全ページを検査する。

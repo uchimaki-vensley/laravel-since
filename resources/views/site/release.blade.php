@@ -1,14 +1,14 @@
-<x-site.layout :public-url="$publicUrl" :locale="$locale" :directory="$directory" :title="'v'.$page->release->version" :description="__('site.release_description', ['version' => $page->release->version])">
-    <nav class="breadcrumb" aria-label="{{ __('site.breadcrumb') }}"><a href="{{ $siteUrl('/') }}">{{ __('site.home') }}</a> / {{ __('site.releases') }}</nav>
+<x-site.layout :public-url="$publicUrl" :locale="$locale" :path="$path" :title="'v'.$page->release->version" :description="__('site.release_description', ['version' => $page->release->version])">
+    <nav class="breadcrumb" aria-label="{{ __('site.breadcrumb') }}"><a href="{{ $siteUrl() }}">{{ __('site.home') }}</a> / {{ __('site.releases') }}</nav>
 
     <h1>v{{ $page->release->version }}</h1>
 
     <nav class="pager" aria-label="{{ __('site.adjacent') }}">
         @if ($page->previous !== null)
-            <a rel="prev" href="{{ $siteUrl($page->previous->url) }}">← v{{ $page->previous->version }}</a>
+            <a rel="prev" href="{{ $siteUrl($page->previous->path) }}">← v{{ $page->previous->version }}</a>
         @endif
         @if ($page->next !== null)
-            <a rel="next" href="{{ $siteUrl($page->next->url) }}">v{{ $page->next->version }} →</a>
+            <a rel="next" href="{{ $siteUrl($page->next->path) }}">v{{ $page->next->version }} →</a>
         @endif
     </nav>
 
@@ -33,8 +33,8 @@
                     <ul class="change-list">
                         @foreach ($items as $item)
                             <li>
-                                @if ($item->url !== null)
-                                    <a href="{{ $siteUrl($item->url) }}"><code>{{ $item->member }}</code></a>
+                                @if ($item->path !== null)
+                                    <a href="{{ $siteUrl($item->path) }}"><code>{{ $item->member }}</code></a>
                                 @else
                                     <code>{{ $item->member }}</code>
                                 @endif

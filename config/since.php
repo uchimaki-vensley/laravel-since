@@ -39,7 +39,7 @@ return [
         'url' => env('SINCE_SITE_URL', 'https://laravel-since.pages.dev'),
         // since:build の出力先。中身は毎回丸ごと置き換える。
         'path' => env('SINCE_SITE_PATH', base_path('dist')),
-        // そのまま出力に含める静的ファイル（CSS・JS・_headers）
+        // そのまま出力に含める静的ファイル（CSS・JS・_headers・_redirects）
         'assets_path' => resource_path('site'),
     ],
 

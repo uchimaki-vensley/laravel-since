@@ -2,6 +2,8 @@
 
 namespace App\Application\Site\Pages;
 
+use App\Application\Site\SitePath;
+
 /**
  * 型のページに載せる 1 つのメソッド。
  */
@@ -20,7 +22,7 @@ final readonly class MemberView
         public ?string $signature,
         public array $docblockLines,
         public ?string $since,
-        public ?string $sinceUrl,
+        public ?SitePath $sincePath,
         public bool $sinceOrEarlier,
         public bool $isStatic,
         public bool $isDocblock,

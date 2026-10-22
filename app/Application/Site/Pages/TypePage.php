@@ -2,6 +2,7 @@
 
 namespace App\Application\Site\Pages;
 
+use App\Application\Site\SitePath;
 use App\Domain\Enums\TypeKind;
 
 /**
@@ -16,6 +17,7 @@ final readonly class TypePage
      */
     public function __construct(
         public string $fqcn,
+        public SitePath $path,
         public ?TypeKind $kind,
         public ?string $filePath,
         public bool $isInternal,

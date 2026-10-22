@@ -23,7 +23,7 @@ final readonly class LocalSiteOutput implements SiteOutput
     public const string MARKER = '.since-site';
 
     /**
-     * @param  string  $assets  そのまま出力に含める静的ファイル（CSS・JS・`_headers`）のディレクトリ
+     * @param  string  $assets  そのまま出力に含める静的ファイル（CSS・JS・`_headers`・`_redirects`）のディレクトリ
      * @param  string  $destination  出力先
      */
     public function __construct(

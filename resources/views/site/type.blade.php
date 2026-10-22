@@ -3,8 +3,8 @@
     $shortName = $separator === false ? $page->fqcn : substr($page->fqcn, $separator + 1);
     $namespace = $separator === false ? null : substr($page->fqcn, 0, $separator);
 @endphp
-<x-site.layout :public-url="$publicUrl" :locale="$locale" :directory="$directory" :title="$shortName" :description="__('site.type_description', ['type' => $page->fqcn])">
-    <nav class="breadcrumb" aria-label="{{ __('site.breadcrumb') }}"><a href="{{ $siteUrl('/') }}">{{ __('site.home') }}</a> / {{ __('site.types') }}</nav>
+<x-site.layout :public-url="$publicUrl" :locale="$locale" :path="$path" :title="$shortName" :description="__('site.type_description', ['type' => $page->fqcn])">
+    <nav class="breadcrumb" aria-label="{{ __('site.breadcrumb') }}"><a href="{{ $siteUrl() }}">{{ __('site.home') }}</a> / {{ __('site.types') }}</nav>
 
     <header class="type-header">
         <h1>{{ $shortName }}</h1>

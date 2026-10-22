@@ -3,7 +3,7 @@
         <h2><a class="anchor" href="#{{ $member->name }}">{{ $member->name }}</a></h2>
         <p class="since">
             @if ($member->since !== null)
-                <a href="{{ $siteUrl($member->sinceUrl) }}">{{ __('site.'.($member->sinceOrEarlier ? 'since_or_earlier' : 'since'), ['version' => $member->since]) }}</a>
+                <a href="{{ $siteUrl($member->sincePath) }}">{{ __('site.'.($member->sinceOrEarlier ? 'since_or_earlier' : 'since'), ['version' => $member->since]) }}</a>
             @else
                 <span class="muted">{{ __('site.no_added') }}</span>
             @endif
@@ -36,7 +36,7 @@
         <ol class="history">
             @foreach ($member->history as $entry)
                 <li>
-                    <a href="{{ $siteUrl($entry->url) }}">v{{ $entry->version }}</a>
+                    <a href="{{ $siteUrl($entry->path) }}">v{{ $entry->version }}</a>
                     <x-site.kind :kind="$entry->kind" />
                     <x-site.signature-change :before="$entry->before" :after="$entry->after" />
                 </li>
