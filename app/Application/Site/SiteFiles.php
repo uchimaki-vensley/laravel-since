@@ -8,7 +8,7 @@ namespace App\Application\Site;
 interface SiteFiles
 {
     /**
-     * @param  string  $path  サイトのルートからの相対パス（例: `types/Illuminate/Support/Str/index.html`）
+     * @param  string  $path  サイトのルートからの相対パス（例: `ja/types/Illuminate/Support/Str/index.html`）
      */
     public function write(string $path, string $contents): void;
 }

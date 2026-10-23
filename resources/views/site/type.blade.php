@@ -1,10 +1,11 @@
+@use('App\Application\Site\SitePath')
 @php
     $separator = strrpos($page->fqcn, '\\');
     $shortName = $separator === false ? $page->fqcn : substr($page->fqcn, $separator + 1);
     $namespace = $separator === false ? null : substr($page->fqcn, 0, $separator);
 @endphp
-<x-site.layout :title="$shortName" :description="$page->fqcn.' の公開メソッドと、それぞれがいつから存在するか。'">
-    <nav class="breadcrumb" aria-label="パンくず"><a href="/">トップ</a> / 型</nav>
+<x-site.layout :site="$site" :title="$shortName" :description="$site->t('site.type.description', ['fqcn' => $page->fqcn])">
+    <nav class="breadcrumb" aria-label="{{ $site->t('site.breadcrumb.label') }}"><a href="{{ $site->url(SitePath::home()) }}">{{ $site->t('site.breadcrumb.home') }}</a> / {{ $site->t('site.breadcrumb.type') }}</nav>
 
     <header class="type-header">
         <h1>{{ $shortName }}</h1>
@@ -26,12 +27,12 @@
             @endif
         </p>
         @if (! $page->existsInLatest())
-            <p class="notice">この型は最新のリリース（v{{ $page->latestVersion }}）にはありません。</p>
+            <p class="notice">{{ $site->t('site.type.not_in_latest', ['version' => (string) $page->latestVersion]) }}</p>
         @endif
     </header>
 
     @if ($page->members !== [])
-        <nav class="toc" aria-label="メソッドの一覧">
+        <nav class="toc" aria-label="{{ $site->t('site.type.toc_label') }}">
             @foreach ($page->members as $member)
                 <a href="#{{ $member->name }}" @class(['removed' => $member->signature === null])>{{ $member->name }}</a>
             @endforeach
@@ -39,7 +40,7 @@
     @endif
 
     @if ($page->members === [] && $page->internalMembers === [])
-        <p class="notice">公開メソッドはありません。</p>
+        <p class="notice">{{ $site->t('site.type.no_methods') }}</p>
     @endif
 
     @foreach ($page->members as $member)
@@ -48,7 +49,7 @@
 
     @if ($page->internalMembers !== [])
         <details class="internal-members">
-            <summary><code>@@internal</code> のメソッド（{{ count($page->internalMembers) }}）</summary>
+            <summary><x-site.trans :site="$site" key="site.type.internal_methods" :replace="['count' => (string) count($page->internalMembers)]"><x-slot:internal><code>@@internal</code></x-slot:internal></x-site.trans></summary>
             @foreach ($page->internalMembers as $member)
                 @include('site.partials.member', ['member' => $member])
             @endforeach

@@ -11,9 +11,19 @@ use App\Application\Site\Pages\TypePage;
  */
 interface SiteRenderer
 {
-    public function index(IndexPage $page): string;
+    /**
+     * 言語の付かないトップ（`/`）。ブラウザの言語に合うトップへ移る。
+     */
+    public function entry(): string;
 
-    public function release(ReleasePage $page): string;
+    /**
+     * ページがない URL に返す 404。言語の付かない URL（公開済みの古い URL など）は、ブラウザの言語に合う同じページへ移る。
+     */
+    public function notFound(): string;
 
-    public function type(TypePage $page): string;
+    public function index(IndexPage $page, SiteLocale $locale): string;
+
+    public function release(ReleasePage $page, SiteLocale $locale): string;
+
+    public function type(TypePage $page, SiteLocale $locale): string;
 }

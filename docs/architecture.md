@@ -86,9 +86,9 @@ Issue #7（静的サイトの出力）の配置:
 
 | 層 | クラス | 役割 |
 | --- | --- | --- |
-| Application | `App\Application\Site\SiteBuilder`（実装は `SiteBuilderService`）、`SitePaths`、`SignatureFormatter`、`Pages\*` | サイトを作るユースケース。URL とファイルの置き場所、シグネチャの表示、ページの内容 |
+| Application | `App\Application\Site\SiteBuilder`（実装は `SiteBuilderService`）、`SitePath`、`SiteLocale`、`SignatureFormatter`、`Pages\*` | サイトを作るユースケース。ページの場所と言語、シグネチャの表示、ページの内容 |
 | Application（ポート） | `SiteCatalog` / `SiteRenderer` / `SiteOutput` / `SiteFiles` | DB の読み出し・HTML への変換・出力先の置き換え・ファイルの書き込み |
-| Infrastructure | `Persistence\Eloquent\Repositories\EloquentSiteCatalog`、`Site\BladeSiteRenderer`、`Site\LocalSiteOutput` / `LocalSiteFiles` | Eloquent、Blade（`resources/views/site`）、ローカルのファイル |
+| Infrastructure | `Persistence\Eloquent\Repositories\EloquentSiteCatalog`、`Site\BladeSiteRenderer`（`SiteView`）、`Site\LocalSiteOutput` / `LocalSiteFiles` | Eloquent、Blade（`resources/views/site`）と言語ファイル（`lang/{en,ja}/site.php`）、ローカルのファイル |
 | Presentation | `App\Console\Commands\BuildCommand`（`since:build`） | 入口 |
 
 設定値（`config/since.php`）は app/Providers で読み、コンストラクタ引数として Application / Infrastructure に渡す。
@@ -248,13 +248,16 @@ symbols（リリースをまたいだ同一性）           symbol_changes（差
 
 ```
 dist/
-  index.html                       検索ページ（search.json をブラウザで絞り込む）とリリース一覧
-  search.json                      型とメソッドの軽量な一覧
-  releases/{version}/index.html    そのリリースで追加・削除・変更・非推奨になったもの
-  types/{名前空間を / で区切った型名}/index.html
+  index.html                       言語の付かないトップ。ブラウザの言語のトップ（/en/ か /ja/）へ移る
+  404.html                         ページのない URL。言語の付かない URL は、ブラウザの言語の同じページへ移る
+  search.json                      型とメソッドの軽量な一覧（言語によらない）
+  {言語}/                          言語ごとのページ（en・ja。構成は同じ）
+    index.html                     検索ページ（search.json をブラウザで絞り込む）とリリース一覧
+    releases/{version}/index.html  そのリリースで追加・削除・変更・非推奨になったもの
+    types/{名前空間を / で区切った型名}/index.html
                                    型ごとのメソッド一覧と、各メソッドの「いつから」と変更履歴
-                                   （例: types/Illuminate/Database/Eloquent/Builder/）
-  assets/                          site.css・search.js・favicon.svg（resources/site からそのまま写す）
+                                   （例: en/types/Illuminate/Database/Eloquent/Builder/）
+  assets/                          site.css・search.js・language.js・favicon.svg（resources/site からそのまま写す）
   _headers                         セキュリティヘッダー（CSP など。security.md 参照）
   .since-site                      since:build が書いた出力であることの印
 ```
@@ -274,8 +277,29 @@ dist/
 - 出力は `since.site.path`（環境変数 `SINCE_SITE_PATH`、既定 `dist/`）。同じ親ディレクトリの一時ディレクトリに書き終えてから rename で置き換える。
   誤った設定で無関係なディレクトリを消さないよう、既存の出力先は空か `.since-site` がある場合だけ置き換える。
 - サイトにユーザー入力を受け取るフォームやサーバー処理はない。検索はブラウザ内で完結する。
+- 言語の扱いは次の「静的サイトの言語」を参照。
 - 実測（13.35.0 / 13.36.0 の 2 リリース）: 1,646 型・13,068 メソッドで 1,655 ファイル・約 26MB、メモリのピーク約 75MB。
   スナップショットと変更履歴は 200 件（変更履歴は 2,000 件）ずつ読み、Eloquent のモデルをまとめて持たない。
+
+## 静的サイトの言語（英語・日本語）
+
+- ページは言語ごとに `/{言語}/...` に同じ構成で置く（`SiteLocale`: `en`・`ja`）。ページの中身（DB からの集計）は 1 度だけ作り、
+  描画だけを言語ごとに行う。`search.json` は言語によらず 1 つ。
+- ページの場所は `SitePath`（言語を含まない）で持ち、URL とファイルのパスは言語を渡して作る。`SitePath` は文字列に変換できないので、
+  テンプレートで言語の付かないリンクを出力しようとするとビルドが失敗する。
+- 文言は `lang/{en,ja}/site.php` に置く。テンプレートは `SiteView::t()` で、そのページの言語の文言だけを取る（ほかの言語へは落とさない）。
+  キーがなければ例外にしてビルドを止める。言語間のキーと `:名前` の一致、変化の種類（`SymbolChangeKind`）ごとのラベルはテストで確かめる。
+- 文言の中のリンクや `<code>` は、`<x-site.trans>` のスロットとしてテンプレート側でマークアップする（文言はエスケープして出す）。
+- 言語の選び方（`assets/language.js`）: 言語の付かない URL（`/`、`/?q=...`、言語対応の前に公開した `/types/...`・`/releases/...`）は、
+  `index.html` か `404.html` が返り、同じパス・検索語・アンカーのまま `/{言語}/` を付けたページへ移る。言語は
+  言語の切り替えで選んだもの（`localStorage`）→ `navigator.languages` で最初に合うもの → 英語、の順に選ぶ。
+  JavaScript が無効なら、両方の言語へのリンクを見せる。言語の付いた URL の 404 は移らずにそのまま見せる。
+- 各ページのヘッダーに、同じページの別の言語へのリンクを置く。押すと選んだ言語を覚え、今の検索語とアンカーを付けて移る。
+- `<html lang>` と、言語ごとの代替リンク（`hreflang`、`x-default` は英語）を出力する。代替リンクの URL は `since.site.url`
+  （環境変数 `SINCE_SITE_URL`、既定 `https://laravel-since.pages.dev`）から作る。
+- ファイル数は 1 言語のときの約 2 倍（`(型の数 + リリースの数 + 1) × 言語の数 + 静的ファイルなど`）。Cloudflare Pages の
+  1 デプロイあたり 20,000 ファイルの上限に対して余裕がある（1 言語で約 1,900）。
+- サーバー側（Pages Functions など）での言語判定はしない（サーバー処理を持たない方針のため）。
 
 ## 定期実行の所要時間と、毎回作り直す方式（決定）
 

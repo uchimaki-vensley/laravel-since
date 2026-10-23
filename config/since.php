@@ -39,6 +39,8 @@ return [
         'path' => env('SINCE_SITE_PATH', base_path('dist')),
         // そのまま出力に含める静的ファイル（CSS・JS・_headers）
         'assets_path' => resource_path('site'),
+        // サイトの公開 URL（末尾の / なし）。言語ごとの代替リンク（hreflang）に使う。
+        'url' => env('SINCE_SITE_URL', 'https://laravel-since.pages.dev'),
     ],
 
 ];

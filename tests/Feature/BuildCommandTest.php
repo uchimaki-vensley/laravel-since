@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Application\Site\SiteLocale;
+use App\Application\Site\SitePath;
 use App\Domain\Enums\MethodSource;
 use App\Domain\Enums\SymbolChangeKind;
 use App\Infrastructure\Persistence\Eloquent\Models\Method;
@@ -10,9 +12,13 @@ use App\Infrastructure\Persistence\Eloquent\Models\Release;
 use App\Infrastructure\Persistence\Eloquent\Models\Symbol;
 use App\Infrastructure\Persistence\Eloquent\Models\SymbolChange;
 use App\Infrastructure\Persistence\Eloquent\Models\Type;
+use App\Infrastructure\Site\SiteView;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Testing\PendingCommand;
+use Illuminate\Translation\Translator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
@@ -46,7 +52,7 @@ class BuildCommandTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_writes_the_search_release_and_type_pages(): void
+    public function test_writes_the_search_release_and_type_pages_in_each_language(): void
     {
         $this->seedReleases();
 
@@ -57,27 +63,38 @@ class BuildCommandTest extends TestCase
 
         $this->assertSame([
             '.since-site',
+            '404.html',
             '_headers',
             'assets/favicon.svg',
+            'assets/language.js',
             'assets/search.js',
             'assets/site.css',
+            'en/index.html',
+            'en/releases/13.2.0/index.html',
+            'en/releases/13.3.0/index.html',
+            'en/types/Illuminate/Database/Eloquent/Builder/index.html',
+            'en/types/Illuminate/Old/Gone/index.html',
             'index.html',
-            'releases/13.2.0/index.html',
-            'releases/13.3.0/index.html',
+            'ja/index.html',
+            'ja/releases/13.2.0/index.html',
+            'ja/releases/13.3.0/index.html',
+            'ja/types/Illuminate/Database/Eloquent/Builder/index.html',
+            'ja/types/Illuminate/Old/Gone/index.html',
             'search.json',
-            'types/Illuminate/Database/Eloquent/Builder/index.html',
-            'types/Illuminate/Old/Gone/index.html',
         ], $this->files());
 
-        $index = $this->page('index.html');
+        $index = $this->page('ja/index.html');
         $this->assertStringContainsString('<script src="/assets/search.js" defer></script>', $index);
-        $this->assertStringContainsString('v13.2.0 〜 v13.3.0', $index);
-        $this->assertStringContainsString('<a href="/releases/13.3.0/">v13.3.0</a>', $index);
+        $this->assertStringContainsString('<strong>どのリリースで追加され</strong>、<strong>いつシグネチャが変わったか</strong> を逆引きできます。', $index);
+        $this->assertStringContainsString('対象は <code>laravel/framework</code> v13.2.0 〜 v13.3.0。', $index);
+        $this->assertStringContainsString('<code>@internal</code> も含める', $index);
+        $this->assertStringContainsString('<a href="/ja/releases/13.3.0/">v13.3.0</a>', $index);
+        $this->assertStringContainsString('data-text-since=":version から"', $index);
 
-        $builder = $this->page('types/Illuminate/Database/Eloquent/Builder/index.html');
+        $builder = $this->page('ja/types/Illuminate/Database/Eloquent/Builder/index.html');
         $this->assertStringContainsString('<section class="member" id="incrementEach">', $builder);
-        $this->assertStringContainsString('<a href="/releases/13.3.0/">v13.3.0</a> から', $builder);
-        $this->assertStringContainsString('<a href="/releases/13.2.0/">v13.2.0</a> 以前から', $builder);
+        $this->assertStringContainsString('<a href="/ja/releases/13.3.0/">v13.3.0</a> から', $builder);
+        $this->assertStringContainsString('<a href="/ja/releases/13.2.0/">v13.2.0</a> 以前から', $builder);
         $this->assertStringContainsString('incrementEach(array $columns, array $extra = []): int', $builder);
         $this->assertStringContainsString('@param array&lt;string, float|int|numeric-string&gt; $columns', $builder);
         $this->assertStringContainsString('static macroed(string|null $name = null)', $builder);
@@ -86,23 +103,99 @@ class BuildCommandTest extends TestCase
         $this->assertStringContainsString('$label = &#039;&lt;script&gt;alert(1)&lt;/script&gt;&#039;', $builder);
         $this->assertStringNotContainsString('<script>alert(1)', $builder);
 
-        $gone = $this->page('types/Illuminate/Old/Gone/index.html');
+        $gone = $this->page('ja/types/Illuminate/Old/Gone/index.html');
         $this->assertStringContainsString('この型は最新のリリース（v13.3.0）にはありません。', $gone);
         $this->assertStringContainsString('v13.3.0 で削除', $gone);
 
-        $release = $this->page('releases/13.3.0/index.html');
-        $this->assertStringContainsString('<a href="/types/Illuminate/Database/Eloquent/Builder/#incrementEach"><code>incrementEach</code></a>', $release);
+        $release = $this->page('ja/releases/13.3.0/index.html');
+        $this->assertStringContainsString('<a href="/ja/types/Illuminate/Database/Eloquent/Builder/#incrementEach"><code>incrementEach</code></a>', $release);
         $this->assertStringContainsString('<dd><code>where(string $column): static</code></dd>', $release);
         $this->assertStringContainsString('<dd><code>where(string $column, mixed $value = null): static</code></dd>', $release);
-        $this->assertStringContainsString('<a rel="prev" href="/releases/13.2.0/">', $release);
+        $this->assertStringContainsString('<a rel="prev" href="/ja/releases/13.2.0/">', $release);
+        $this->assertStringContainsString('<span class="kind kind-signature_changed">シグネチャ変更</span>', $release);
         $this->assertStringContainsString('<code>Illuminate\..\Evil</code>', $release);
         $this->assertStringContainsString('<code>surprise</code>', $release);
 
         // 解析の起点のリリースは、全メソッドが「追加」になるので件数だけ出す。
-        $baseline = $this->page('releases/13.2.0/index.html');
+        $baseline = $this->page('ja/releases/13.2.0/index.html');
         $this->assertStringContainsString('<span class="count">2</span>', $baseline);
         $this->assertStringContainsString('一覧は省略します。', $baseline);
         $this->assertStringNotContainsString('legacy', $baseline);
+
+        // 英語のページは同じ構成で、文言とリンクが英語になる。
+        $englishIndex = $this->page('en/index.html');
+        $this->assertStringContainsString('Look up <strong>which release added them</strong> and <strong>when their signatures changed</strong>', $englishIndex);
+        $this->assertStringContainsString('Covers <code>laravel/framework</code> v13.2.0 to v13.3.0.', $englishIndex);
+        $this->assertStringContainsString('Include <code>@internal</code>', $englishIndex);
+        $this->assertStringContainsString('<a href="/en/releases/13.3.0/">v13.3.0</a>', $englishIndex);
+
+        $englishBuilder = $this->page('en/types/Illuminate/Database/Eloquent/Builder/index.html');
+        $this->assertStringContainsString('since <a href="/en/releases/13.3.0/">v13.3.0</a>', $englishBuilder);
+        $this->assertStringContainsString('since <a href="/en/releases/13.2.0/">v13.2.0</a> or earlier', $englishBuilder);
+        $this->assertStringContainsString('<summary><code>@internal</code> methods (1)</summary>', $englishBuilder);
+        $this->assertStringContainsString('Removed in v13.3.0', $this->page('en/types/Illuminate/Old/Gone/index.html'));
+
+        $englishRelease = $this->page('en/releases/13.3.0/index.html');
+        $this->assertStringContainsString('<a href="/en/types/Illuminate/Database/Eloquent/Builder/#incrementEach"><code>incrementEach</code></a>', $englishRelease);
+        $this->assertStringContainsString('<span class="kind kind-signature_changed">Signature changed</span>', $englishRelease);
+        $this->assertStringContainsString('<dt>Before</dt>', $englishRelease);
+
+        foreach ($this->localizedPages() as $file) {
+            // 翻訳のキーがそのまま出ていない。
+            $this->assertDoesNotMatchRegularExpression('/\bsite\.[a-z_]+\.[a-z_]+/', $this->page($file), $file);
+        }
+    }
+
+    public function test_each_page_links_to_itself_in_the_other_language(): void
+    {
+        $this->seedReleases();
+
+        $this->build()->assertSuccessful();
+
+        $builder = 'types/Illuminate/Database/Eloquent/Builder/';
+        $japanese = $this->page("ja/{$builder}index.html");
+        $english = $this->page("en/{$builder}index.html");
+
+        $this->assertStringContainsString('<html lang="ja" data-locales="en ja">', $japanese);
+        $this->assertStringContainsString('<html lang="en" data-locales="en ja">', $english);
+        $this->assertStringContainsString("<a href=\"/en/{$builder}\" hreflang=\"en\" lang=\"en\" data-locale=\"en\">English</a>", $japanese);
+        $this->assertStringContainsString("<a href=\"/ja/{$builder}\" hreflang=\"ja\" lang=\"ja\" data-locale=\"ja\">日本語</a>", $english);
+
+        foreach ([$japanese, $english] as $html) {
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"en\" href=\"https://laravel-since.pages.dev/en/{$builder}\">", $html);
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"ja\" href=\"https://laravel-since.pages.dev/ja/{$builder}\">", $html);
+            $this->assertStringContainsString("<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://laravel-since.pages.dev/en/{$builder}\">", $html);
+            $this->assertStringContainsString('<script src="/assets/language.js" defer></script>', $html);
+        }
+
+        $this->assertStringContainsString('<a class="brand" href="/ja/">', $japanese);
+        $this->assertStringContainsString('<a class="brand" href="/en/">', $english);
+    }
+
+    public function test_pages_without_a_language_send_visitors_to_their_language(): void
+    {
+        $this->seedReleases();
+
+        $this->build()->assertSuccessful();
+
+        $entry = $this->page('index.html');
+        $notFound = $this->page('404.html');
+
+        foreach ([$entry, $notFound] as $html) {
+            $this->assertStringContainsString('<html lang="en" data-locales="en ja" data-default-locale="en" data-redirect>', $html);
+            // ページを描く前に移るよう、defer を付けずに読み込む。
+            $this->assertStringContainsString('<script src="/assets/language.js"></script>', $html);
+            $this->assertStringContainsString('<a href="/en/" hreflang="en" data-locale="en">View in English</a>', $html);
+            $this->assertStringContainsString('<a href="/ja/" hreflang="ja" data-locale="ja">日本語で見る</a>', $html);
+        }
+
+        $this->assertStringContainsString('<link rel="alternate" hreflang="ja" href="https://laravel-since.pages.dev/ja/">', $entry);
+        $this->assertStringContainsString('<link rel="alternate" hreflang="x-default" href="https://laravel-since.pages.dev/">', $entry);
+        $this->assertStringNotContainsString('noindex', $entry);
+
+        $this->assertStringContainsString('<meta name="robots" content="noindex">', $notFound);
+        $this->assertStringContainsString('ページが見つかりません。', $notFound);
+        $this->assertStringContainsString('Page not found.', $notFound);
     }
 
     public function test_writes_security_headers_and_no_inline_or_external_scripts(): void
@@ -120,10 +213,27 @@ class BuildCommandTest extends TestCase
 
         foreach (array_filter($this->files(), static fn (string $file) => str_ends_with($file, '.html')) as $file) {
             $html = $this->page($file);
-            $this->assertDoesNotMatchRegularExpression('/<script(?![^>]*\ssrc="\/)[^>]*>/', $html, $file);
-            $this->assertDoesNotMatchRegularExpression('/<(?:script|link|img)[^>]+(?:src|href)="(?!\/)/', $html, $file);
+            $this->assertDoesNotMatchRegularExpression('/<script(?![^>]*\ssrc="\/(?!\/))[^>]*>/', $html, $file);
+            $this->assertDoesNotMatchRegularExpression('/<(?:script|img)[^>]+src="(?!\/(?!\/))/', $html, $file);
             $this->assertDoesNotMatchRegularExpression('/\son[a-z]+=/', $html, $file);
             $this->assertStringNotContainsString(' style=', $html, $file);
+
+            // <link> は自サイトのファイルか、自サイトの公開 URL（言語ごとの代替リンク）だけを指す。
+            preg_match_all('/<link[^>]+href="([^"]*)"/', $html, $links);
+
+            foreach ($links[1] as $href) {
+                $this->assertMatchesRegularExpression('#\A(?:/(?!/)|https://laravel-since\.pages\.dev/)#', $href, $file);
+            }
+        }
+
+        // 言語ごとのページのサイト内リンクは、すべて言語の付いた URL か静的ファイルを指す。
+        foreach ($this->localizedPages() as $file) {
+            preg_match_all('/<a[^>]+href="(\/[^"]*)"/', $this->page($file), $links);
+            $this->assertNotEmpty($links[1], $file);
+
+            foreach ($links[1] as $href) {
+                $this->assertMatchesRegularExpression('#\A/(?:en|ja)/#', $href, $file);
+            }
         }
     }
 
@@ -155,7 +265,7 @@ class BuildCommandTest extends TestCase
         $this->build()->assertSuccessful();
 
         $this->assertFileDoesNotExist("{$this->dist}/stale.html");
-        $this->assertFileExists("{$this->dist}/index.html");
+        $this->assertFileExists("{$this->dist}/ja/index.html");
         $this->assertSame(['dist'], array_values(array_diff(scandir($this->workspace) ?: [], ['.', '..'])));
     }
 
@@ -183,8 +293,84 @@ class BuildCommandTest extends TestCase
             ->expectsOutputToContain('Built the site: 0 release(s), 0 type(s), 0 method(s).')
             ->assertSuccessful();
 
-        $this->assertStringContainsString('まだ解析済みのリリースはありません。', $this->page('index.html'));
+        $this->assertStringContainsString('まだ解析済みのリリースはありません。', $this->page('ja/index.html'));
+        $this->assertStringContainsString('No releases have been parsed yet.', $this->page('en/index.html'));
         $this->assertSame(['latest' => null, 'types' => [], 'members' => []], json_decode($this->page('search.json'), true, flags: JSON_THROW_ON_ERROR));
+    }
+
+    public function test_translations_have_the_same_keys_and_placeholders_in_every_language(): void
+    {
+        $translator = $this->app->make(Translator::class);
+        $lines = [];
+
+        foreach (SiteLocale::cases() as $locale) {
+            $site = $translator->get('site', [], $locale->value, false);
+            $this->assertIsArray($site, $locale->value);
+            $lines[$locale->value] = Arr::dot($site);
+        }
+
+        $expected = array_shift($lines);
+
+        foreach ($lines as $locale => $actual) {
+            $this->assertSame(array_keys($expected), array_keys($actual), $locale);
+
+            foreach ($expected as $key => $line) {
+                $this->assertIsString($line, $key);
+                $this->assertIsString($actual[$key], "{$locale}: {$key}");
+                $this->assertSame(self::placeholders($line), self::placeholders($actual[$key]), "{$locale}: {$key}");
+            }
+        }
+    }
+
+    public function test_every_change_kind_has_a_label_in_every_language(): void
+    {
+        $translator = $this->app->make(Translator::class);
+
+        foreach (SiteLocale::cases() as $locale) {
+            foreach (SymbolChangeKind::cases() as $kind) {
+                $this->assertTrue($translator->hasForLocale("site.kind.{$kind->value}", $locale->value), "{$locale->value}: {$kind->value}");
+            }
+        }
+    }
+
+    public function test_a_missing_translation_stops_the_build_instead_of_falling_back(): void
+    {
+        $translator = $this->app->make(Translator::class);
+        $translator->addLines(['site.only_in_english' => 'Only in English'], 'en');
+        $view = new SiteView($translator, 'https://laravel-since.pages.dev', SiteLocale::Ja, SitePath::home());
+
+        $this->assertSame('Only in English', $view->t('site.only_in_english', [], SiteLocale::En));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Missing translation for ja: site.only_in_english');
+        $view->t('site.only_in_english');
+    }
+
+    public function test_a_site_path_cannot_be_printed_without_a_language(): void
+    {
+        $this->expectExceptionMessage('App\Application\Site\SitePath given');
+
+        Blade::render('<a href="{{ $path }}">', ['path' => SitePath::home()]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function placeholders(string $line): array
+    {
+        preg_match_all('/:([a-z_]+)/', $line, $matches);
+        $names = $matches[1];
+        sort($names);
+
+        return $names;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function localizedPages(): array
+    {
+        return array_values(array_filter($this->files(), static fn (string $file) => preg_match('#\A(?:en|ja)/.*\.html\z#', $file) === 1));
     }
 
     private function seedReleases(): void

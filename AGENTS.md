@@ -29,6 +29,7 @@ node scripts/devenv.mjs compose exec app vendor/bin/pint      # 整形
 node scripts/devenv.mjs compose exec app composer analyse     # 静的解析（Larastan / PHPStan、レベル max）
 node scripts/devenv.mjs compose exec app composer audit       # 依存の脆弱性確認
 node --test scripts/devenv.test.mjs                           # devenv のテスト（ホストの Node）
+node --test tests/js/                                         # サイトのスクリプトのテスト（ホストの Node）
 ```
 
 ## 規則

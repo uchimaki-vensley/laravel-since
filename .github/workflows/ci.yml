@@ -54,3 +54,6 @@ jobs:
 
       - name: devenv tests
         run: node --test scripts/devenv.test.mjs
+
+      - name: Site script tests
+        run: node --test tests/js/

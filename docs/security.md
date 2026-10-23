@@ -82,9 +82,11 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 - Blade の出力は常にエスケープする（`{!! !!}` を使わない。使う場合は理由をコメントに書く）。
   解析したソース由来の文字列（型・既定値・docblock）も `{{ }}` で出す
 - 検索（`assets/search.js`）は結果を `textContent` で組み立て、`innerHTML` を使わない
+- 言語の選択（`assets/language.js`）で移る先は、今の URL のパスの前にサイトの言語（`<html data-locales>` にあるもの）を付けたものだけにする。
+  移る先に外部の URL や保存された値をそのまま使わない（保存した言語も、サイトの言語にあるものだけを使う）
 - 型名から作るページのパスは、PHP の識別子（ASCII）を `\` でつないだ名前に限る。それ以外の名前はページにせず警告を出す。
   書き込みは出力ディレクトリの中の相対パス（`.` で始まるセグメント・空のセグメント・バックスラッシュを含まないもの）に限り、既存のファイルを上書きしない
-  （実装は `App\Application\Site\SitePaths`、`App\Infrastructure\Site\LocalSiteFiles`）
+  （実装は `App\Application\Site\SitePath`、`App\Infrastructure\Site\LocalSiteFiles`）
 
 ## 取得したソースの扱い
 

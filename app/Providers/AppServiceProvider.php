@@ -40,10 +40,12 @@ use App\Infrastructure\Site\BladeSiteRenderer;
 use App\Infrastructure\Site\LocalSiteOutput;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\View\Factory as ViewFactory;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Translation\Translator;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -111,7 +113,11 @@ class AppServiceProvider extends ServiceProvider
         ));
 
         $this->app->bind(SiteCatalog::class, EloquentSiteCatalog::class);
-        $this->app->bind(SiteRenderer::class, BladeSiteRenderer::class);
+        $this->app->bind(SiteRenderer::class, fn (Application $app) => new BladeSiteRenderer(
+            $app->make(ViewFactory::class),
+            $app->make(Translator::class),
+            Config::string('since.site.url'),
+        ));
         $this->app->bind(SiteOutput::class, fn (Application $app) => new LocalSiteOutput(
             $app->make(Filesystem::class),
             Config::string('since.site.assets_path'),

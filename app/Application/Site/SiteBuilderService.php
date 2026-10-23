@@ -16,13 +16,18 @@ use App\Domain\Api\TypeDeclaration;
 use App\Domain\Enums\MethodSource;
 use App\Domain\Enums\SymbolChangeKind;
 use App\Domain\Releases\PackageName;
+use Closure;
 
 /**
  * 最新のリリースのスナップショットと全リリースの変更履歴から、静的サイトを作る。
  *
- * - トップ（検索）: `index.html` と、ブラウザ内で絞り込む `search.json`
- * - リリースごとの変更一覧: `releases/{version}/index.html`
- * - 型ごとのメソッド一覧: `types/{名前空間を / で区切った型名}/index.html`
+ * ページは言語ごとに `{言語}/` の下に同じ構成で置く。ページの中身は 1 度だけ作り、描画だけを言語ごとに行う。
+ *
+ * - 言語の付かないトップ: `index.html`（ブラウザの言語のトップへ移る）と `404.html`
+ * - ブラウザ内で絞り込む検索の一覧: `search.json`（言語によらない）
+ * - トップ（検索）: `{言語}/index.html`
+ * - リリースごとの変更一覧: `{言語}/releases/{version}/index.html`
+ * - 型ごとのメソッド一覧: `{言語}/types/{名前空間を / で区切った型名}/index.html`
  */
 final readonly class SiteBuilderService implements SiteBuilder
 {
@@ -73,28 +78,29 @@ final readonly class SiteBuilderService implements SiteBuilder
             $changesByVersion[(string) $change->version][] = $change;
         }
 
-        $directories = [];
+        $paths = [];
         $skipped = [];
 
         foreach (array_keys($snapshot + $changesByType) as $fqcn) {
             $fqcn = (string) $fqcn;
-            $directory = SitePaths::typeDirectory($fqcn);
+            $path = SitePath::type($fqcn);
 
-            if ($directory === null) {
+            if ($path === null) {
                 $skipped[] = $fqcn;
             } else {
-                $directories[$fqcn] = $directory;
+                $paths[$fqcn] = $path;
             }
         }
 
-        ksort($directories, SORT_STRING);
+        ksort($paths, SORT_STRING);
         sort($skipped, SORT_STRING);
 
         $typePages = [];
 
-        foreach ($directories as $fqcn => $directory) {
+        foreach ($paths as $fqcn => $path) {
             $typePages[$fqcn] = $this->typePage(
                 $fqcn,
+                $path,
                 $snapshot[$fqcn] ?? null,
                 $changesByType[$fqcn] ?? [],
                 $latest,
@@ -105,33 +111,38 @@ final readonly class SiteBuilderService implements SiteBuilder
         $links = $this->releaseLinks($releases, $changes);
         $memberCount = array_sum(array_map(static fn (TypePage $page) => count($page->members) + count($page->internalMembers), $typePages));
 
-        $this->output->replace(function (SiteFiles $files) use ($releases, $links, $changesByVersion, $directories, $typePages, $latest, $oldest, $memberCount) {
-            $files->write('index.html', $this->renderer->index(new IndexPage(
-                $latest === null ? null : (string) $latest->tag->version,
-                $oldest === null ? null : (string) $oldest->tag->version,
-                count($typePages),
-                $memberCount,
-                array_reverse(array_values($links)),
-            )));
+        $index = new IndexPage(
+            $latest === null ? null : (string) $latest->tag->version,
+            $oldest === null ? null : (string) $oldest->tag->version,
+            count($typePages),
+            $memberCount,
+            array_reverse(array_values($links)),
+        );
 
+        $this->output->replace(function (SiteFiles $files) use ($releases, $links, $changesByVersion, $typePages, $index, $latest) {
+            $files->write('index.html', $this->renderer->entry());
+            $files->write('404.html', $this->renderer->notFound());
             $files->write('search.json', self::searchIndex($typePages, $latest));
 
-            foreach ($releases as $index => $release) {
-                $version = (string) $release->tag->version;
-                $previous = $releases[$index - 1] ?? null;
-                $next = $releases[$index + 1] ?? null;
+            self::writeLocalized($files, SitePath::home(), fn (SiteLocale $locale) => $this->renderer->index($index, $locale));
 
-                $files->write(SitePaths::page(SitePaths::releaseDirectory($release->tag->version)), $this->renderer->release(new ReleasePage(
+            foreach ($releases as $position => $release) {
+                $version = (string) $release->tag->version;
+                $previous = $releases[$position - 1] ?? null;
+                $next = $releases[$position + 1] ?? null;
+                $page = new ReleasePage(
                     $links[$version],
                     $previous === null ? null : $links[(string) $previous->tag->version],
                     $next === null ? null : $links[(string) $next->tag->version],
                     // 解析の起点のリリースでは、その時点のメソッドがすべて「追加」になるので一覧を省く。
-                    $this->sections($changesByVersion[$version] ?? [], $directories, $typePages, omitAdded: $index === 0),
-                )));
+                    $this->sections($changesByVersion[$version] ?? [], $typePages, omitAdded: $position === 0),
+                );
+
+                self::writeLocalized($files, $page->release->path, fn (SiteLocale $locale) => $this->renderer->release($page, $locale));
             }
 
-            foreach ($typePages as $fqcn => $page) {
-                $files->write(SitePaths::page($directories[$fqcn]), $this->renderer->type($page));
+            foreach ($typePages as $page) {
+                self::writeLocalized($files, $page->path, fn (SiteLocale $locale) => $this->renderer->type($page, $locale));
             }
         });
 
@@ -161,7 +172,7 @@ final readonly class SiteBuilderService implements SiteBuilder
     /**
      * @param  list<SymbolChangeEntry>  $changes  この型の変化（古い順）
      */
-    private function typePage(string $fqcn, ?TypeDeclaration $type, array $changes, ?ReleaseSummary $latest, ?ReleaseSummary $oldest): TypePage
+    private function typePage(string $fqcn, SitePath $path, ?TypeDeclaration $type, array $changes, ?ReleaseSummary $latest, ?ReleaseSummary $oldest): TypePage
     {
         /** @var array<string, array{method: ?MethodDeclaration, name: string, changes: list<SymbolChangeEntry>}> $members */
         $members = [];
@@ -185,6 +196,7 @@ final readonly class SiteBuilderService implements SiteBuilder
 
         return new TypePage(
             $fqcn,
+            $path,
             $type?->kind,
             $type?->filePath,
             $type->isInternal ?? false,
@@ -221,7 +233,7 @@ final readonly class SiteBuilderService implements SiteBuilder
             $method === null ? null : SignatureFormatter::signature($method),
             $method === null ? [] : SignatureFormatter::docblockLines($method),
             $since === null ? null : (string) $since,
-            $since === null ? null : SitePaths::url(SitePaths::releaseDirectory($since)),
+            $since === null ? null : SitePath::release($since),
             $since !== null && $oldest !== null && $since->compare($oldest->tag->version) === 0,
             $method->isStatic ?? false,
             $method?->source === MethodSource::Docblock,
@@ -230,7 +242,7 @@ final readonly class SiteBuilderService implements SiteBuilder
             $method === null && $removedIn !== null ? (string) $removedIn : null,
             array_map(static fn (SymbolChangeEntry $change) => new HistoryEntry(
                 (string) $change->version,
-                SitePaths::url(SitePaths::releaseDirectory($change->version)),
+                SitePath::release($change->version),
                 $change->kind,
                 $change->before,
                 $change->after,
@@ -258,7 +270,7 @@ final readonly class SiteBuilderService implements SiteBuilder
             $version = (string) $release->tag->version;
             $links[$version] = new ReleaseLink(
                 $version,
-                SitePaths::url(SitePaths::releaseDirectory($release->tag->version)),
+                SitePath::release($release->tag->version),
                 $counts[$version][SymbolChangeKind::Added->value] ?? 0,
                 $counts[$version][SymbolChangeKind::Removed->value] ?? 0,
                 $counts[$version][SymbolChangeKind::SignatureChanged->value] ?? 0,
@@ -271,11 +283,10 @@ final readonly class SiteBuilderService implements SiteBuilder
 
     /**
      * @param  list<SymbolChangeEntry>  $changes  1 つのリリースの変化
-     * @param  array<string, string>  $directories
      * @param  array<string, TypePage>  $typePages
      * @return list<ChangeSection>
      */
-    private function sections(array $changes, array $directories, array $typePages, bool $omitAdded): array
+    private function sections(array $changes, array $typePages, bool $omitAdded): array
     {
         $sections = [];
 
@@ -294,11 +305,11 @@ final readonly class SiteBuilderService implements SiteBuilder
                     continue;
                 }
 
-                $directory = $directories[$change->fqcn] ?? null;
+                $page = $typePages[$change->fqcn] ?? null;
                 $items[] = new ChangeItem(
                     $change->fqcn,
                     $change->member,
-                    $directory === null ? null : self::memberUrl($directory, self::displayName($typePages[$change->fqcn], $change->member)),
+                    $page === null ? null : $page->path->withFragment(self::displayName($page, $change->member)),
                     $change->before,
                     $change->after,
                 );
@@ -329,9 +340,16 @@ final readonly class SiteBuilderService implements SiteBuilder
         return $member;
     }
 
-    private static function memberUrl(string $directory, string $member): string
+    /**
+     * 同じページをすべての言語で書く。
+     *
+     * @param  Closure(SiteLocale): string  $render
+     */
+    private static function writeLocalized(SiteFiles $files, SitePath $path, Closure $render): void
     {
-        return SitePaths::url($directory).'#'.rawurlencode($member);
+        foreach (SiteLocale::cases() as $locale) {
+            $files->write($path->file($locale), $render($locale));
+        }
     }
 
     /**

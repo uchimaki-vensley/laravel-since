@@ -1,5 +1,6 @@
 // search.json をブラウザ内で絞り込む。
 // サーバー処理はない。結果は textContent で組み立て、HTML として解釈させない（docs/security.md）。
+// 文言はページの言語のもの（検索欄の data-text-*）を使い、リンクは同じ言語のページへ張る。
 (function () {
   'use strict';
 
@@ -10,20 +11,39 @@
   var FLAG_SINCE_OR_EARLIER = 16;
   var LIMIT = 100;
 
+  var section = document.querySelector('.search');
   var input = document.getElementById('q');
   var includeInternal = document.getElementById('include-internal');
   var status = document.getElementById('search-status');
   var results = document.getElementById('search-results');
 
-  if (!input || !includeInternal || !status || !results) {
+  if (!section || !input || !includeInternal || !status || !results) {
     return;
   }
+
+  // <html lang> はサイトの言語（en・ja）のどれか。
+  var locale = document.documentElement.lang;
 
   var entries = null;
   var total = 0;
 
   function typeUrl(fqcn) {
-    return '/types/' + fqcn.split('\\').join('/') + '/';
+    return '/' + locale + '/types/' + fqcn.split('\\').join('/') + '/';
+  }
+
+  // data-text-* の文言の :name を置き換える。
+  function text(name, values) {
+    var result = section.getAttribute('data-text-' + name) || '';
+
+    Object.keys(values || {}).forEach(function (key) {
+      result = result.split(':' + key).join(values[key]);
+    });
+
+    return result;
+  }
+
+  function number(value) {
+    return value.toLocaleString(locale);
   }
 
   function shortName(fqcn) {
@@ -122,9 +142,9 @@
     since.className = 'result-since';
 
     if (entry.flags & FLAG_REMOVED) {
-      since.appendChild(badge('削除済み', 'badge-danger'));
+      since.appendChild(badge(text('removed'), 'badge-danger'));
     } else if (entry.since !== null) {
-      since.textContent = 'v' + entry.since + (entry.flags & FLAG_SINCE_OR_EARLIER ? ' 以前から' : ' から');
+      since.textContent = text(entry.flags & FLAG_SINCE_OR_EARLIER ? 'since-or-earlier' : 'since', { version: 'v' + entry.since });
     }
 
     if (entry.flags & FLAG_DEPRECATED) {
@@ -156,14 +176,15 @@
     results.replaceChildren();
 
     if (matches === null) {
-      status.textContent = total.toLocaleString() + ' 件の型・メソッドから検索できます。';
+      status.textContent = text('total', { count: number(total) });
 
       return;
     }
 
     status.textContent = matches.length === 0
-      ? '見つかりませんでした。'
-      : matches.length.toLocaleString() + ' 件' + (matches.length > LIMIT ? '（上位 ' + LIMIT + ' 件を表示）' : '');
+      ? text('none')
+      : text(matches.length === 1 ? 'count-one' : 'count-other', { count: number(matches.length) })
+        + (matches.length > LIMIT ? text('limited', { limit: number(LIMIT) }) : '');
 
     var fragment = document.createDocumentFragment();
     matches.slice(0, LIMIT).forEach(function (match) {
@@ -220,6 +241,6 @@
       render();
     })
     .catch(function () {
-      status.textContent = '検索の一覧を読み込めませんでした。';
+      status.textContent = text('error');
     });
 })();
