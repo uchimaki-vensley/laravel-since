@@ -10,6 +10,7 @@ Laravel フレームワークの公開 API をリリースごとに解析し、�
 - [guideline.md](guideline.md): Onion Architecture の実装・レビュー基準（実装・レビュー前に必ず読む）
 - [docs/infrastructure.md](docs/infrastructure.md): GitHub Actions / Cloudflare Pages の構成とシークレット
 - [docs/security.md](docs/security.md): 脅威モデルと守るべき規則（**必ず守る**）
+- [docs/dependency-updates.md](docs/dependency-updates.md): 依存更新の仕組み（Dependabot と自動マージ）と人が対応するもの
 
 ## 技術スタック
 

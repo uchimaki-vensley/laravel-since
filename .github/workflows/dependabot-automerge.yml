@@ -1,0 +1,49 @@
+name: Dependabot auto-merge
+
+# Dependabot の PR のうち、major を含まないものに自動マージを予約する（docs/dependency-updates.md）。
+# マージ自体は、必須チェック `test` が通ったあとに GitHub が行う。PR の承認はしない（docs/security.md）。
+on:
+  pull_request:
+
+# 既定は読み取りのみ。自動マージの予約に必要な権限は automerge ジョブだけに付ける。
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  automerge:
+    name: automerge
+    # PR を作ったのも、この実行のきっかけ（作成・push）を起こしたのも Dependabot のときだけ動かす。
+    # 人がブランチに push した PR は自動マージしない。
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    # チェックアウトしない。PR のコードは実行せず、GitHub API でコミットメッセージを読むだけにする。
+    steps:
+      - name: Enable auto-merge unless a major update is included
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Dependabot はコミットメッセージの末尾に、更新した依存ごとの update-type を書く。
+          message=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA" --jq .commit.message)
+          dependencies=$(printf '%s\n' "$message" | grep -c '^- dependency-name: ' || true)
+          minor_or_patch=$(printf '%s\n' "$message" | grep -cE '^  update-type: version-update:semver-(minor|patch)$' || true)
+          echo "dependencies=$dependencies minor_or_patch=$minor_or_patch"
+
+          # すべての依存が minor / patch だと読み取れたときだけ予約する。
+          # major を含むもの、update-type が読み取れないものは人が確認する。
+          if [ "$dependencies" -eq 0 ] || [ "$dependencies" -ne "$minor_or_patch" ]; then
+            echo "::notice::major を含む、または更新の種類を判定できないため、自動マージしない（人が確認してマージする）"
+            exit 0
+          fi
+
+          gh pr merge "$PR_URL" --auto --squash
