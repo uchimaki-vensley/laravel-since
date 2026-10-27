@@ -38,6 +38,7 @@ GitHub Actions（定期実行）
 | [docs/architecture.md](docs/architecture.md) | アプリケーションの構成・データモデル・処理の流れ・使う Laravel の機能 |
 | [docs/infrastructure.md](docs/infrastructure.md) | GitHub Actions と Cloudflare Pages の構成・シークレット・費用 |
 | [docs/security.md](docs/security.md) | 脅威モデルと、リポジトリ・CI・配信の各層で取っている対策 |
+| [docs/dependency-updates.md](docs/dependency-updates.md) | 依存更新の仕組み（Dependabot と自動マージ）と、人が対応するもの |
 | [SECURITY.md](SECURITY.md) | 脆弱性の報告方法 |
 
 ## 開発環境

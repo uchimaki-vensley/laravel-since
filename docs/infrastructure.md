@@ -18,6 +18,7 @@ VPS・常時動くサーバー・外部 DB は持たない（理由は context.m
 | ワークフロー | きっかけ | 権限 | シークレット | 状態 |
 | --- | --- | --- | --- | --- |
 | `ci.yml` | PR / main への push | `contents: read` のみ | 使わない | 作成済み |
+| `dependabot-automerge.yml` | PR（作成者・きっかけが `dependabot[bot]` のときだけジョブが動く） | 既定は `contents: read`。`automerge` ジョブだけ `contents: write` / `pull-requests: write` | 使わない | 作成済み |
 | `deploy.yml` | 定期実行（毎日 03:17 UTC）/ 手動実行。**main のみ** | `contents: read` のみ | `deploy` ジョブだけが `production` 環境の `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` を読む | 作成済み |
 
 ### deploy.yml の流れ
@@ -47,7 +48,7 @@ VPS・常時動くサーバー・外部 DB は持たない（理由は context.m
 - Cloudflare Pages の **Git 連携は使わない**。Git 連携だと PR ごとにプレビューのビルドが走るため、
   ビルドの実行とデプロイの権限を GitHub Actions の `production` 環境に一本化する。
 - wrangler は `cloudflare/wrangler-action` ではなく npm から入れる。action はロックファイルなしで wrangler を入れるため、
-  推移的な依存まで版とハッシュを固定できる `deploy/package-lock.json` を使う。更新は Dependabot（npm、`/deploy`）が PR にする。
+  推移的な依存まで版とハッシュを固定できる `deploy/package-lock.json` を使う。更新は Dependabot（npm、`/deploy`）が PR にし、major 以外は自動マージされる（[dependency-updates.md](dependency-updates.md)）。
 - GitHub API は Actions の `GITHUB_TOKEN`（読み取りのみ）で呼ぶ。未認証より緩いレート制限で済む。
 
 ## シークレットの管理

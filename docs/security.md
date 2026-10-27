@@ -22,8 +22,8 @@
 | 攻撃者 | できること | 対策 |
 | --- | --- | --- |
 | 外部の人（public なので誰でも） | Issue・PR・コメントの作成、フォークからの PR | 書き込み権限はオーナーのみ。フォークからの PR のワークフローは **毎回オーナーの承認が必要**。PR のワークフローは読み取り専用トークンでシークレットなし |
-| 悪意ある PR の内容 | ワークフローファイルの改変、テストに紛れたコード | `pull_request_target` を使わない。シークレットは main 限定の環境にしかない。マージできるのはオーナーだけなので、main に入る前にオーナーが差分を読む |
-| 侵害された依存パッケージ / Action | CI 上で任意コード実行 | Action はコミット SHA で固定し、許可リスト以外の Action を禁止。`composer.lock` を固定し `composer audit` を CI で実行。Dependabot で更新を PR として受け取り、内容を見てマージ |
+| 悪意ある PR の内容 | ワークフローファイルの改変、テストに紛れたコード | `pull_request_target` を使わない。シークレットは main 限定の環境にしかない。マージできるのはオーナーだけなので、main に入る前にオーナーが差分を読む（例外は Dependabot の PR の自動マージだけ。作成者もきっかけも `dependabot[bot]` の PR に限る） |
+| 侵害された依存パッケージ / Action | CI 上で任意コード実行 | Action はコミット SHA で固定し、許可リスト以外の Action を禁止。`composer.lock` を固定し `composer audit` を CI で実行。Dependabot で更新を PR として受け取る。公開から 7 日たった版だけを取り込み（cooldown）、major 以外は CI が通れば自動マージ、major は内容を見てマージ（[dependency-updates.md](dependency-updates.md)） |
 | 解析対象の Laravel のソース | 解析時の任意コード実行 | ソースは実行せず `nikic/php-parser` で構文として読むだけ。展開時のパストラバーサルを拒否 |
 | シークレットの誤コミット | トークン漏洩 | シークレットスキャンとプッシュ保護を有効化。`.env` は `.gitignore` 済み |
 | オーナーのアカウント乗っ取り | すべて | GitHub・Cloudflare とも 2 要素認証（オーナー側の運用で担保） |
@@ -47,7 +47,7 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 - Action は **コミット SHA で固定** する（タグは書き換えられるため）。コメントにバージョンを書く。
   リポジトリ設定 `sha_pinning_required` により、SHA で固定していない Action を含むワークフローは GitHub 側で実行が拒否される
 - `GITHUB_TOKEN` の既定権限は **読み取りのみ**。必要なジョブだけ `permissions:` で広げる
-- Actions による PR の作成・承認を禁止
+- Actions による PR の作成・承認を禁止。`dependabot-automerge.yml` は自動マージを予約するだけで、承認はしない（ルールセットは承認 0 件で通る）
 - フォークからの PR のワークフロー実行は、外部の人については **すべて承認制**
 - `actions/checkout` は `persist-credentials: false` で使う
 - `pull_request_target` と `workflow_run` は使わない（使う必要が出たら、この文書に理由と対策を書いてから）
@@ -63,7 +63,10 @@ API で設定済み。状態は `gh api repos/uchimaki-vensley/laravel-since ...
 
 - シークレットスキャン、プッシュ保護: 有効
 - Dependabot アラート、Dependabot セキュリティアップデート: 有効
-- Dependabot バージョンアップデート（`.github/dependabot.yml`）: GitHub Actions・Composer・npm・Docker
+- Dependabot バージョンアップデート（`.github/dependabot.yml`）: GitHub Actions・Composer・npm・Docker。
+  minor / patch はエコシステムごとにまとめ、公開から 7 日たった版だけを取り込む（cooldown。セキュリティアップデートには効かない）
+- 自動マージ（`allow_auto_merge`）: 有効。`dependabot-automerge.yml` が Dependabot の PR のうち major を含まないものにだけ予約する。
+  書き込み権限はこのジョブだけに付け、PR のコードはチェックアウトしない。運用は [dependency-updates.md](dependency-updates.md)
 - CodeQL（default setup）: GitHub Actions のワークフローを解析（PHP は CodeQL の対象外）
 - 非公開の脆弱性報告（Private vulnerability reporting）: 有効
 
